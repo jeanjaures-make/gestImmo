@@ -132,6 +132,35 @@ async function checkSchemaVersion(url: string, key: string): Promise<Check> {
 }
 
 /**
+ * Acheminement des e-mails.
+ *
+ * Aucune API ne permet de savoir ce que le projet Supabase a configuré :
+ * on ne peut donc pas *tester* l'envoi, seulement rappeler que le SMTP
+ * intégré ne convient pas à la production. Le silence serait pire — c'est
+ * le point qui casse en premier, et de la façon la moins visible : les
+ * invitations partent sans erreur apparente et n'arrivent jamais.
+ */
+function checkMail(): Check {
+  if (process.env.SMTP_PROVIDER_CONFIGURED === "true") {
+    return {
+      label: "Envoi des e-mails",
+      status: "ok",
+      detail:
+        "Un fournisseur SMTP est déclaré. Vérifiez un envoi réel avant la mise en production.",
+    };
+  }
+
+  return {
+    label: "Envoi des e-mails",
+    status: "warn",
+    detail:
+      "SMTP intégré de Supabase : fortement limité en débit et non prévu pour la production. " +
+      "Les invitations de locataires et de collaborateurs en dépendent entièrement. " +
+      "Raccordez un fournisseur dans Authentication → SMTP Settings, puis posez SMTP_PROVIDER_CONFIGURED=true.",
+  };
+}
+
+/**
  * Diagnostic complet, sans jamais lever d'exception : l'écran de setup doit
  * s'afficher quel que soit l'état de la configuration.
  */
@@ -149,6 +178,7 @@ export async function runDiagnostics(): Promise<Check[]> {
       status: "warn",
       detail: "Non testée : corrigez d'abord les variables ci-dessus.",
     });
+    checks.push(checkMail());
     return checks;
   }
 
@@ -198,5 +228,6 @@ export async function runDiagnostics(): Promise<Check[]> {
     });
   }
 
+  checks.push(checkMail());
   return checks;
 }

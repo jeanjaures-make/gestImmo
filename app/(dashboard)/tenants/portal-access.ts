@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 
 import { authorize } from "@/lib/auth";
+import { describeInviteError } from "@/lib/mailer";
 import { callerKey, rateLimit } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -95,7 +96,7 @@ export async function grantPortalAccess(
           "Cette adresse a déjà un compte. Utilisez-en une autre, ou retirez d'abord le compte existant.",
       };
     }
-    return { error: error.message };
+    return { error: describeInviteError(error.message) };
   }
 
   const { error: profileError } = await admin.from("profiles").insert({

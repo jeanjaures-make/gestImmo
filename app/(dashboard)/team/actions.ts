@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { authorize } from "@/lib/auth";
+import { describeInviteError } from "@/lib/mailer";
 import { callerKey, rateLimit } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -62,7 +63,7 @@ export async function inviteMember(
           "Cette adresse a déjà un compte. Elle ne peut pas rejoindre une seconde organisation.",
       };
     }
-    return { error: error.message };
+    return { error: describeInviteError(error.message) };
   }
 
   // Le profil est écrit avec le client admin : il n'existe volontairement

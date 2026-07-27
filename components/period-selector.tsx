@@ -2,10 +2,8 @@
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
+import { PERIODS, type Period } from "@/lib/periods";
 import { cn } from "@/lib/utils";
-
-export const PERIODS = [6, 12, 24] as const;
-export type Period = (typeof PERIODS)[number];
 
 export function PeriodSelector({ current }: { current: Period }) {
   const router = useRouter();

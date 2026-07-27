@@ -1,0 +1,109 @@
+name: CI
+
+# Aucun changement ne doit pouvoir être fusionné sans passer ces contrôles.
+# Pour que ce soit effectif, cocher « Require status checks to pass before
+# merging » dans Settings → Branches → Branch protection rules, et y
+# sélectionner les jobs `qualite` et `parcours`.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  # Une nouvelle poussée sur la même branche annule la précédente : inutile
+  # de payer deux fois pour un état déjà dépassé.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  qualite:
+    name: Lint, types et build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Lint
+        run: npx eslint .
+
+      - name: TypeScript
+        run: npx tsc --noEmit
+
+      # Le build est volontairement lancé SANS les variables Supabase : il
+      # doit aboutir sur un environnement où elles manquent, sinon un
+      # déploiement de prévisualisation mal configuré casse la compilation
+      # au lieu de dégrader vers l'écran de diagnostic.
+      - name: Build sans configuration
+        run: npm run build
+
+  parcours:
+    name: Parcours de bout en bout
+    runs-on: ubuntu-latest
+    # Sans secrets Supabase, ces tests n'ont rien à interroger : on les
+    # saute explicitement plutôt que de les faire échouer.
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Vérifier la présence des secrets
+        id: secrets
+        run: |
+          if [ -z "$NEXT_PUBLIC_SUPABASE_URL" ] || [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "presents=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Secrets Supabase absents — parcours et cloisonnement non exécutés."
+          else
+            echo "presents=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Les scripts lisent .env.local ; en CI les valeurs viennent des
+      # secrets du dépôt, jamais d'un fichier commité.
+      - name: Reconstituer .env.local
+        if: steps.secrets.outputs.presents == 'true'
+        run: |
+          {
+            echo "NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL"
+            echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY"
+            echo "SUPABASE_SERVICE_ROLE_KEY=$SUPABASE_SERVICE_ROLE_KEY"
+          } > .env.local
+
+      - name: Build
+        if: steps.secrets.outputs.presents == 'true'
+        run: npm run build
+
+      - name: Cloisonnement multi-tenant
+        if: steps.secrets.outputs.presents == 'true'
+        run: npm run verify:rls
+
+      - name: Installer Chromium
+        if: steps.secrets.outputs.presents == 'true'
+        run: npx playwright install --with-deps chromium
+
+      - name: Parcours utilisateurs
+        if: steps.secrets.outputs.presents == 'true'
+        run: npm run test:e2e
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7

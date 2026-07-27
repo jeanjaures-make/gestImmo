@@ -24,7 +24,8 @@ import {
   type MonthlyRevenuePoint,
   type PortfolioPoint,
 } from "@/components/charts";
-import { PeriodSelector, PERIODS, type Period } from "@/components/period-selector";
+import { PeriodSelector } from "@/components/period-selector";
+import { readPeriod } from "@/lib/periods";
 import {
   Card,
   CardContent,
@@ -130,10 +131,7 @@ export default async function DashboardPage({
   const { profile } = await requireSession();
   const { months: monthsParam } = await searchParams;
 
-  const requested = Number(monthsParam);
-  const period: Period = PERIODS.includes(requested as Period)
-    ? (requested as Period)
-    : 12;
+  const period = readPeriod(monthsParam);
 
   const supabase = await createClient();
   const months = lastMonths(period);
