@@ -8,10 +8,18 @@ import { supabaseEnv } from "./env";
  *
  * `cookies()` est asynchrone depuis Next.js 15 : cette fonction doit donc
  * être awaitée (`const supabase = await createClient()`).
+ *
+ * L'ordre des deux premières lignes n'est pas cosmétique. Lire les cookies
+ * signale à Next.js que la route dépend de la requête, donc qu'elle ne peut
+ * pas être prérendue à la compilation. En lisant la configuration d'abord,
+ * une variable d'environnement absente levait une exception AVANT ce
+ * signal : Next tentait alors un rendu statique, échouait, et faisait
+ * échouer tout le build — au lieu de laisser la page se rendre à la requête
+ * et rediriger vers le diagnostic `/setup`.
  */
 export async function createClient() {
-  const { url, anonKey } = supabaseEnv();
   const cookieStore = await cookies();
+  const { url, anonKey } = supabaseEnv();
 
   return createServerClient(url, anonKey, {
     cookies: {

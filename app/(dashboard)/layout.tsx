@@ -12,6 +12,15 @@ import { getUnreadCount } from "@/lib/notifications";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { ROLE_LABELS } from "@/lib/types";
 
+/**
+ * Aucun écran du back-office n'est prérendable : tous dépendent de la
+ * session, donc des cookies de la requête. Le déclarer explicitement évite
+ * que le build tente un rendu statique — tentative qui, sur un
+ * environnement où les variables Supabase manquent, faisait échouer la
+ * compilation entière au lieu de dégrader vers `/setup`.
+ */
+export const dynamic = "force-dynamic";
+
 export default async function DashboardLayout({
   children,
 }: {

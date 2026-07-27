@@ -9,6 +9,9 @@ import { requireTenantSession } from "@/lib/auth";
 import { getUnreadCount } from "@/lib/notifications";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 
+/** Comme le back-office : tout le portail dépend de la session. */
+export const dynamic = "force-dynamic";
+
 export default async function PortalLayout({
   children,
 }: {

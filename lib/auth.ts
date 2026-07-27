@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { cache } from "react";
 
 import { createClient } from "@/lib/supabase/server";
+import { isSupabaseConfigured } from "@/lib/supabase/env";
 import type { Organization, Profile, UserRole } from "@/lib/types";
 
 export type Session = {
@@ -69,6 +70,12 @@ export const getSession = cache(async (): Promise<
  * écrans vides — ce qui serait déroutant plutôt que sécurisant.
  */
 export async function requireSession(): Promise<Session> {
+  // La garde vit ici plutôt que dans le seul layout : une page et son layout
+  // se rendent en parallèle, la page atteindrait donc Supabase avant que le
+  // layout ait eu l'occasion de rediriger. Toutes les pages protégées
+  // passent par cette fonction, aucune ne peut l'oublier.
+  if (!isSupabaseConfigured()) redirect("/setup");
+
   const session = await getSession();
   if (session === null) redirect("/login");
   if (session === "no-profile") redirect("/onboarding");
@@ -80,6 +87,8 @@ export async function requireSession(): Promise<Session> {
 export async function requireTenantSession(): Promise<
   Session & { tenantId: string }
 > {
+  if (!isSupabaseConfigured()) redirect("/setup");
+
   const session = await getSession();
   if (session === null) redirect("/login");
   if (session === "no-profile") redirect("/onboarding");
