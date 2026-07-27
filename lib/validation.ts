@@ -15,13 +15,27 @@ const text = (min: number, max: number, label: string) =>
     .min(min, { message: `${label} est obligatoire.` })
     .max(max, { message: `${label} est trop long (${max} caractères max).` });
 
+/**
+ * Un champ absent équivaut à un champ vide.
+ *
+ * Un formulaire HTML envoie toujours tous ses champs, fût-ce vides ; une
+ * Server Action appelée autrement — script d'import, test, requête forgée
+ * — peut en omettre. Sans ce garde-fou, l'absence produisait « expected
+ * string, received undefined », message qui désigne un type au lieu de
+ * désigner le champ fautif.
+ */
+const blankIfMissing = (value: unknown) => (value === undefined ? "" : value);
+
 const optionalText = (max: number) =>
-  z
-    .string()
-    .trim()
-    .max(max)
-    .transform((v) => (v === "" ? null : v))
-    .nullable();
+  z.preprocess(
+    blankIfMissing,
+    z
+      .string()
+      .trim()
+      .max(max)
+      .transform((v) => (v === "" ? null : v))
+      .nullable(),
+  );
 
 // Les <input type="number"> renvoient des chaînes ; on accepte aussi la
 // virgule décimale, usuelle en français.
@@ -37,26 +51,32 @@ const money = z
       .min(0, { message: "Le montant doit être positif." }),
   );
 
-const optionalMoney = z
-  .string()
-  .trim()
-  .transform((v) => (v === "" ? null : Number(v.replace(",", "."))))
-  .pipe(
-    z
-      .number({ message: "Montant invalide." })
-      .min(0, { message: "Le montant doit être positif." })
-      .nullable(),
-  );
+const optionalMoney = z.preprocess(
+  blankIfMissing,
+  z
+    .string()
+    .trim()
+    .transform((v) => (v === "" ? null : Number(v.replace(",", "."))))
+    .pipe(
+      z
+        .number({ message: "Montant invalide." })
+        .min(0, { message: "Le montant doit être positif." })
+        .nullable(),
+    ),
+);
 
 const isoDate = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, { message: "Date invalide." });
 
-const optionalIsoDate = z
-  .string()
-  .trim()
-  .transform((v) => (v === "" ? null : v))
-  .pipe(isoDate.nullable());
+const optionalIsoDate = z.preprocess(
+  blankIfMissing,
+  z
+    .string()
+    .trim()
+    .transform((v) => (v === "" ? null : v))
+    .pipe(isoDate.nullable()),
+);
 
 export const credentialsSchema = z.object({
   email: z.email({ message: "Adresse e-mail invalide." }),

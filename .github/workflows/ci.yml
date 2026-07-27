@@ -35,6 +35,11 @@ jobs:
       - name: TypeScript
         run: npx tsc --noEmit
 
+      # Ne dépendent ni de la base ni du réseau : ils tournent partout,
+      # y compris sur une contribution externe sans accès aux secrets.
+      - name: Tests unitaires
+        run: npm test
+
       # Le build est volontairement lancé SANS les variables Supabase : il
       # doit aboutir sur un environnement où elles manquent, sinon un
       # déploiement de prévisualisation mal configuré casse la compilation

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { authorize } from "@/lib/auth";
+import { reportError } from "@/lib/observability";
 import { createClient } from "@/lib/supabase/server";
 import type { FormState } from "@/lib/form";
 import { firstIssue, formDataToObject, paymentSchema } from "@/lib/validation";
@@ -37,7 +38,17 @@ export async function reviewDeclaration(
     p_accept: accept,
   });
 
-  if (error) return { error: error.message };
+  if (error) {
+    // Un encaissement qui échoue ne doit pas disparaître avec le message
+    // affiché : c'est de l'argent, la trace doit survivre à l'onglet.
+    const ref = reportError(error, {
+      scope: "review-payment-declaration",
+      organizationId: auth.session.organization.id,
+      userId: auth.session.userId,
+      extra: { declarationId: id, accept },
+    });
+    return { error: `${error.message} (référence ${ref})` };
+  }
 
   revalidateAll();
   revalidatePath("/portal/payments");

@@ -69,32 +69,12 @@ export const getTenantPayments = cache(async (): Promise<PortalPayment[]> => {
   return data ?? [];
 });
 
-/** Le bail en cours, ou à défaut le plus récent. */
-export function activeLease(leases: PortalLease[]) {
-  return leases.find((l) => l.status === "active") ?? leases[0] ?? null;
-}
-
-/** Une échéance non soldée dont le mois est révolu est en retard. */
-export function effectivePaymentStatus(
-  payment: Pick<PortalPayment, "status" | "month">,
-): PaymentStatus {
-  if (payment.status !== "pending") return payment.status;
-  const endOfMonth = new Date(payment.month);
-  endOfMonth.setMonth(endOfMonth.getMonth() + 1);
-  return endOfMonth < new Date() ? "late" : "pending";
-}
-
-/** Prochaine échéance à régler : la plus ancienne non soldée. */
-export function nextDuePayment(payments: PortalPayment[]) {
-  return (
-    payments
-      .filter((p) => p.status !== "paid")
-      .sort((a, b) => a.month.localeCompare(b.month))[0] ?? null
-  );
-}
-
-export function totalOutstanding(payments: PortalPayment[]) {
-  return payments
-    .filter((p) => p.status !== "paid")
-    .reduce((sum, p) => sum + (Number(p.amount) - Number(p.amount_paid)), 0);
-}
+// Les règles de lecture d'un bail vivent dans `lib/rent.ts` : sans accès à
+// la base, elles se vérifient sans elle. Réexportées ici pour que les
+// écrans conservent un point d'entrée unique.
+export {
+  activeLease,
+  effectivePaymentStatus,
+  nextDuePayment,
+  totalOutstanding,
+} from "@/lib/rent";

@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 
 import { authorize } from "@/lib/auth";
 import { describeInviteError } from "@/lib/mailer";
+import { reportError } from "@/lib/observability";
 import { callerKey, rateLimit } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -96,6 +97,14 @@ export async function grantPortalAccess(
           "Cette adresse a déjà un compte. Utilisez-en une autre, ou retirez d'abord le compte existant.",
       };
     }
+    // L'ouverture d'un accès qui échoue laisse un locataire dehors sans
+    // que personne ne le sache : on en garde une trace côté serveur.
+    reportError(error, {
+      scope: "grant-portal-access",
+      organizationId: auth.session.organization.id,
+      userId: auth.session.userId,
+      extra: { tenantId },
+    });
     return { error: describeInviteError(error.message) };
   }
 
