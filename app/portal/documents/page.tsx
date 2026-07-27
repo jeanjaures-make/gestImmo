@@ -1,7 +1,9 @@
 import { FileDown, FileText } from "lucide-react";
 
+import { Pagination } from "@/components/pagination";
 import { Card, CardContent, EmptyState, StatusBadge } from "@/components/ui/kit";
 import { requireTenantSession } from "@/lib/auth";
+import { readPage } from "@/lib/pagination";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/types";
 
@@ -27,16 +29,25 @@ function formatSize(bytes: number | null) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} Mo`;
 }
 
-export default async function PortalDocumentsPage() {
+export default async function PortalDocumentsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
   await requireTenantSession();
+  const { page: pageParam } = await searchParams;
+  const page = readPage(pageParam);
 
   const supabase = await createClient();
   // Le RLS ne remonte que les pièces rattachées à sa fiche ou à ses baux :
   // les documents de l'immeuble ou de l'organisation restent invisibles.
-  const { data: documents } = await supabase
+  const { data: documents, count } = await supabase
     .from("documents")
-    .select("id, owner_type, file_name, storage_path, size_bytes, created_at")
+    .select("id, owner_type, file_name, storage_path, size_bytes, created_at", {
+      count: "exact",
+    })
     .order("created_at", { ascending: false })
+    .range(page.from, page.to)
     .returns<Doc[]>();
 
   const list = documents ?? [];
@@ -82,6 +93,13 @@ export default async function PortalDocumentsPage() {
           </Card>
         ))}
       </div>
+
+      <Pagination
+        page={page.number}
+        size={page.size}
+        total={count ?? 0}
+        unit="documents"
+      />
     </div>
   );
 }

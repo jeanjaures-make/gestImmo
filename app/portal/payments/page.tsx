@@ -2,8 +2,10 @@ import Link from "next/link";
 import { Clock, FileDown } from "lucide-react";
 
 import { DeclarePayment } from "@/components/declare-payment";
+import { Pagination } from "@/components/pagination";
 import { Card, CardContent, EmptyState, StatusBadge } from "@/components/ui/kit";
 import { requireTenantSession } from "@/lib/auth";
+import { readPage } from "@/lib/pagination";
 import {
   effectivePaymentStatus,
   getTenantPayments,
@@ -23,8 +25,14 @@ import {
 
 export const metadata = { title: "Mes loyers — ImmoOps" };
 
-export default async function PortalPaymentsPage() {
+export default async function PortalPaymentsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
   await requireTenantSession();
+  const { page: pageParam } = await searchParams;
+  const page = readPage(pageParam);
 
   const supabase = await createClient();
   const [payments, { data: declarations }] = await Promise.all([
@@ -74,8 +82,11 @@ export default async function PortalPaymentsPage() {
         <EmptyState>Aucune échéance enregistrée pour l&apos;instant.</EmptyState>
       )}
 
+      {/* Le solde ci-dessus porte sur l'historique complet ; seule la liste
+          est découpée. Découper aussi le calcul afficherait un « reste à
+          régler » qui change quand on tourne la page. */}
       <div className="flex flex-col gap-2">
-        {payments.map((payment) => {
+        {payments.slice(page.from, page.to + 1).map((payment) => {
           const status = effectivePaymentStatus(payment);
           const paid = status === "paid";
           const declaration = latestDeclaration.get(payment.id);
@@ -153,6 +164,13 @@ export default async function PortalPaymentsPage() {
           );
         })}
       </div>
+
+      <Pagination
+        page={page.number}
+        size={page.size}
+        total={payments.length}
+        unit="échéances"
+      />
     </div>
   );
 }

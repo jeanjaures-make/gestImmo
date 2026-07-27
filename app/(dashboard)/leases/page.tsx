@@ -1,9 +1,11 @@
 import { CloseLease } from "@/components/close-lease";
 import { EntityForm } from "@/components/entity-form";
+import { Pagination } from "@/components/pagination";
 import { RecordList, type RecordField } from "@/components/record-list";
 import { RowActions } from "@/components/row-actions";
 import { EmptyState, PageHeader, StatusBadge } from "@/components/ui/kit";
 import { canManage, requireSession } from "@/lib/auth";
+import { readPage } from "@/lib/pagination";
 import { createClient } from "@/lib/supabase/server";
 import {
   formatCurrency,
@@ -24,18 +26,29 @@ type Row = Lease & {
 
 type ApartmentRow = ApartmentOption & { status: string };
 
-export default async function LeasesPage() {
+export default async function LeasesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
   const { profile } = await requireSession();
+  const { page: pageParam } = await searchParams;
+  const page = readPage(pageParam);
   const supabase = await createClient();
 
-  const [{ data: leases, error }, { data: tenants }, { data: apartments }] =
-    await Promise.all([
+  const [
+    { data: leases, error, count },
+    { data: tenants },
+    { data: apartments },
+  ] = await Promise.all([
       supabase
         .from("leases")
         .select(
           "*, tenants(firstname, lastname), apartments(number, buildings(name))",
+          { count: "exact" },
         )
         .order("start_date", { ascending: false })
+        .range(page.from, page.to)
         .returns<Row[]>(),
       supabase
         .from("tenants")
@@ -161,6 +174,15 @@ export default async function LeasesPage() {
                 )
               : undefined
           }
+        />
+      )}
+
+      {!error && (
+        <Pagination
+          page={page.number}
+          size={page.size}
+          total={count ?? 0}
+          unit="baux"
         />
       )}
     </>

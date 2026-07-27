@@ -1,6 +1,7 @@
 import { Building2, MapPin } from "lucide-react";
 
 import { EntityForm } from "@/components/entity-form";
+import { Pagination } from "@/components/pagination";
 import { RowActions } from "@/components/row-actions";
 import {
   Card,
@@ -9,6 +10,7 @@ import {
   PageHeader,
 } from "@/components/ui/kit";
 import { canManage, requireSession } from "@/lib/auth";
+import { readPage } from "@/lib/pagination";
 import { createClient } from "@/lib/supabase/server";
 import { formatCurrency, type Building } from "@/lib/types";
 import { createBuilding, updateBuilding } from "./actions";
@@ -18,15 +20,28 @@ export const metadata = { title: "Immeubles — ImmoOps" };
 
 type Row = Building & { apartments: { count: number }[] };
 
-export default async function BuildingsPage() {
+export default async function BuildingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
   const { profile } = await requireSession();
+  const { page: pageParam } = await searchParams;
+  const page = readPage(pageParam);
   const supabase = await createClient();
 
   // Le RLS restreint déjà à l'organisation : aucun filtre applicatif ici.
-  const { data: buildings, error } = await supabase
+  // `count: exact` accompagne la tranche demandée — c'est lui qui permet de
+  // dire à l'utilisateur combien d'éléments existent au-delà de l'écran.
+  const {
+    data: buildings,
+    error,
+    count,
+  } = await supabase
     .from("buildings")
-    .select("*, apartments(count)")
+    .select("*, apartments(count)", { count: "exact" })
     .order("created_at", { ascending: false })
+    .range(page.from, page.to)
     .returns<Row[]>();
 
   const editable = canManage(profile.role);
@@ -120,6 +135,15 @@ export default async function BuildingsPage() {
           );
         })}
       </div>
+
+      {!error && (
+        <Pagination
+          page={page.number}
+          size={page.size}
+          total={count ?? 0}
+          unit="immeubles"
+        />
+      )}
     </>
   );
 }

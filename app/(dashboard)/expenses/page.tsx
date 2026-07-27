@@ -1,10 +1,12 @@
 import { FileDown } from "lucide-react";
 
 import { EntityForm } from "@/components/entity-form";
+import { Pagination } from "@/components/pagination";
 import { RecordList, type RecordField } from "@/components/record-list";
 import { RowActions } from "@/components/row-actions";
 import { EmptyState, PageHeader, StatusBadge } from "@/components/ui/kit";
 import { canManage, requireSession } from "@/lib/auth";
+import { readPage } from "@/lib/pagination";
 import { createClient } from "@/lib/supabase/server";
 import {
   EXPENSE_CATEGORY_LABELS,
@@ -19,23 +21,33 @@ export const metadata = { title: "Dépenses — ImmoOps" };
 
 type Row = Expense & { buildings: { name: string } | null };
 
-export default async function ExpensesPage() {
+export default async function ExpensesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
   const { profile } = await requireSession();
+  const { page: pageParam } = await searchParams;
+  const page = readPage(pageParam);
   const supabase = await createClient();
 
-  const [{ data: expenses, error }, { data: buildings }] = await Promise.all([
-    supabase
-      .from("expenses")
-      .select("*, buildings(name)")
-      .order("expense_date", { ascending: false })
-      .limit(200)
-      .returns<Row[]>(),
-    supabase.from("buildings").select("id, name").order("name"),
-  ]);
+  const [{ data: expenses, error, count }, { data: buildings }, { data: all }] =
+    await Promise.all([
+      supabase
+        .from("expenses")
+        .select("*, buildings(name)", { count: "exact" })
+        .order("expense_date", { ascending: false })
+        .range(page.from, page.to)
+        .returns<Row[]>(),
+      supabase.from("buildings").select("id, name").order("name"),
+      // Le cumul porte sur toutes les dépenses, pas sur la page affichée.
+      // Une seule colonne voyage : le coût reste marginal.
+      supabase.from("expenses").select("amount").returns<{ amount: number }[]>(),
+    ]);
 
   const editable = canManage(profile.role);
   const buildingOptions = buildings ?? [];
-  const total = expenses?.reduce((sum, e) => sum + Number(e.amount), 0) ?? 0;
+  const total = (all ?? []).reduce((sum, e) => sum + Number(e.amount), 0);
 
   const fields: RecordField<Row>[] = [
     { label: "Libellé", role: "title", value: (e) => e.label },
@@ -77,8 +89,8 @@ export default async function ExpensesPage() {
       <PageHeader
         title="Dépenses"
         description={
-          expenses?.length
-            ? `${formatCurrency(total)} sur la période affichée.`
+          total > 0
+            ? `${formatCurrency(total)} de dépenses enregistrées.`
             : "Charges, travaux, taxes et assurances par immeuble."
         }
       />
@@ -136,6 +148,15 @@ export default async function ExpensesPage() {
                 )
               : undefined
           }
+        />
+      )}
+
+      {!error && (
+        <Pagination
+          page={page.number}
+          size={page.size}
+          total={count ?? 0}
+          unit="dépenses"
         />
       )}
     </>

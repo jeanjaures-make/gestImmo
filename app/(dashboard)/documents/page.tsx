@@ -5,6 +5,7 @@ import {
   DocumentUploader,
   type OwnerOption,
 } from "@/components/document-uploader";
+import { Pagination } from "@/components/pagination";
 import { RecordList, type RecordField } from "@/components/record-list";
 import {
   Button,
@@ -17,6 +18,7 @@ import {
   StatusBadge,
 } from "@/components/ui/kit";
 import { canManage, requireSession } from "@/lib/auth";
+import { readPage } from "@/lib/pagination";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate, type DocumentOwnerType } from "@/lib/types";
 
@@ -52,23 +54,24 @@ function formatSize(bytes: number | null) {
 export default async function DocumentsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; type?: string }>;
+  searchParams: Promise<{ q?: string; type?: string; page?: string }>;
 }) {
   const { profile } = await requireSession();
-  const { q = "", type = "" } = await searchParams;
+  const { q = "", type = "", page: pageParam } = await searchParams;
+  const page = readPage(pageParam);
   const supabase = await createClient();
 
   let query = supabase
     .from("documents")
-    .select("*")
+    .select("*", { count: "exact" })
     .order("created_at", { ascending: false })
-    .limit(300);
+    .range(page.from, page.to);
 
   if (q.trim()) query = query.ilike("file_name", `%${q.trim()}%`);
   if (type) query = query.eq("owner_type", type);
 
   const [
-    { data: documents, error },
+    { data: documents, error, count },
     { data: buildings },
     { data: apartments },
     { data: tenants },
@@ -253,6 +256,15 @@ export default async function DocumentsPage({
               )}
             </div>
           )}
+        />
+      )}
+
+      {!error && (
+        <Pagination
+          page={page.number}
+          size={page.size}
+          total={count ?? 0}
+          unit="documents"
         />
       )}
     </>

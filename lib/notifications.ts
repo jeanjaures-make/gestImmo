@@ -13,19 +13,22 @@ import type { Notification } from "@/lib/types";
  * courant. Ajouter un `.eq()` ici donnerait l'illusion que c'est lui qui
  * protège — et masquerait la vraie garantie.
  */
-export const getNotifications = cache(async (limit = 50): Promise<
-  Notification[]
-> => {
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("notifications")
-    .select("*")
-    .order("created_at", { ascending: false })
-    .limit(limit)
-    .returns<Notification[]>();
+export const getNotifications = cache(
+  async (
+    from: number,
+    to: number,
+  ): Promise<{ items: Notification[]; total: number }> => {
+    const supabase = await createClient();
+    const { data, count } = await supabase
+      .from("notifications")
+      .select("*", { count: "exact" })
+      .order("created_at", { ascending: false })
+      .range(from, to)
+      .returns<Notification[]>();
 
-  return data ?? [];
-});
+    return { items: data ?? [], total: count ?? 0 };
+  },
+);
 
 /**
  * Nombre de notifications non lues, pour la pastille de navigation.

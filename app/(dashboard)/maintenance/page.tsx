@@ -1,9 +1,11 @@
 import { EntityForm } from "@/components/entity-form";
 import { MaintenanceStatusSelect } from "@/components/maintenance-status";
+import { Pagination } from "@/components/pagination";
 import { RecordList, type RecordField } from "@/components/record-list";
 import { RowActions } from "@/components/row-actions";
 import { EmptyState, PageHeader, StatusBadge } from "@/components/ui/kit";
 import { canManage, requireSession } from "@/lib/auth";
+import { readPage } from "@/lib/pagination";
 import { createClient } from "@/lib/supabase/server";
 import {
   formatDate,
@@ -22,22 +24,30 @@ type Row = MaintenanceRecord & {
   apartments: { number: string } | null;
 };
 
-export default async function MaintenancePage() {
+export default async function MaintenancePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
   const { profile } = await requireSession();
+  const { page: pageParam } = await searchParams;
+  const page = readPage(pageParam);
   const supabase = await createClient();
 
   const [
-    { data: interventions, error },
+    { data: interventions, error, count },
     { data: buildings },
     { data: apartments },
+    { count: openCount },
   ] = await Promise.all([
     supabase
       .from("maintenance")
       .select(
         "id, building_id, apartment_id, title, description, priority, status, created_at, buildings(name), apartments(number)",
+        { count: "exact" },
       )
       .order("created_at", { ascending: false })
-      .limit(200)
+      .range(page.from, page.to)
       .returns<Row[]>(),
     supabase.from("buildings").select("id, name").order("name"),
     supabase
@@ -45,15 +55,17 @@ export default async function MaintenancePage() {
       .select("id, number")
       .order("number")
       .returns<{ id: string; number: string }[]>(),
+    // Compté en base sur tout le parc : sur la page affichée, le nombre
+    // d'interventions ouvertes varierait au fil de la navigation.
+    supabase
+      .from("maintenance")
+      .select("*", { count: "exact", head: true })
+      .in("status", ["open", "in_progress"]),
   ]);
 
   const editable = canManage(profile.role);
   const buildingOptions = buildings ?? [];
   const apartmentOptions = apartments ?? [];
-  const openCount =
-    interventions?.filter(
-      (i) => i.status === "open" || i.status === "in_progress",
-    ).length ?? 0;
 
   const fields: RecordField<Row>[] = [
     { label: "Intitulé", role: "title", value: (i) => i.title },
@@ -92,7 +104,7 @@ export default async function MaintenancePage() {
       <PageHeader
         title="Interventions"
         description={
-          openCount > 0
+          openCount && openCount > 0
             ? `${openCount} intervention(s) en cours ou à traiter.`
             : "Suivi de la maintenance du parc."
         }
@@ -155,6 +167,15 @@ export default async function MaintenancePage() {
                 )
               : undefined
           }
+        />
+      )}
+
+      {!error && (
+        <Pagination
+          page={page.number}
+          size={page.size}
+          total={count ?? 0}
+          unit="interventions"
         />
       )}
     </>

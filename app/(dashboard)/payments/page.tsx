@@ -3,6 +3,7 @@ import { BadgeCheck } from "lucide-react";
 import { DeclarationReview } from "@/components/declaration-review";
 import { EntityForm } from "@/components/entity-form";
 import { MarkPaid } from "@/components/mark-paid";
+import { Pagination } from "@/components/pagination";
 import { RecordList, type RecordField } from "@/components/record-list";
 import { RowActions } from "@/components/row-actions";
 import {
@@ -13,6 +14,7 @@ import {
   StatusBadge,
 } from "@/components/ui/kit";
 import { canRecordPayments, requireSession } from "@/lib/auth";
+import { readPage } from "@/lib/pagination";
 import { createClient } from "@/lib/supabase/server";
 import {
   formatCurrency,
@@ -49,17 +51,29 @@ function effectiveStatus(payment: RentPayment): PaymentStatus {
   return endOfMonth < new Date() ? "late" : "pending";
 }
 
-export default async function PaymentsPage() {
+export default async function PaymentsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
   const { profile } = await requireSession();
+  const { page: pageParam } = await searchParams;
+  const page = readPage(pageParam);
   const supabase = await createClient();
 
-  const [{ data: payments, error }, { data: leases }, { data: pending }] =
-    await Promise.all([
+  const [
+    { data: payments, error, count },
+    { data: leases },
+    { data: pending },
+    { data: unsettled },
+  ] = await Promise.all([
       supabase
         .from("rent_payments")
-        .select("*, leases(tenants(firstname, lastname), apartments(number))")
+        .select("*, leases(tenants(firstname, lastname), apartments(number))", {
+          count: "exact",
+        })
         .order("month", { ascending: false })
-        .limit(200)
+        .range(page.from, page.to)
         .returns<Row[]>(),
       supabase
         .from("leases")
@@ -74,15 +88,23 @@ export default async function PaymentsPage() {
         .eq("status", "pending")
         .order("created_at", { ascending: false })
         .returns<PendingDeclaration[]>(),
+      // Le reste à encaisser porte sur TOUT le parc, pas sur la page
+      // affichée : additionner les seules lignes visibles donnerait un
+      // montant qui change quand on tourne la page. Requête distincte,
+      // limitée aux échéances non soldées et aux deux colonnes utiles.
+      supabase
+        .from("rent_payments")
+        .select("amount, amount_paid")
+        .neq("status", "paid")
+        .returns<{ amount: number; amount_paid: number }[]>(),
     ]);
 
   const editable = canRecordPayments(profile.role);
   const leaseOptions = leases ?? [];
-  const outstanding =
-    payments
-      ?.filter((p) => effectiveStatus(p) !== "paid")
-      .reduce((sum, p) => sum + (Number(p.amount) - Number(p.amount_paid)), 0) ??
-    0;
+  const outstanding = (unsettled ?? []).reduce(
+    (sum, p) => sum + (Number(p.amount) - Number(p.amount_paid)),
+    0,
+  );
 
   const nameOf = (row: Row) =>
     row.leases?.tenants
@@ -124,7 +146,7 @@ export default async function PaymentsPage() {
         title="Paiements"
         description={
           outstanding > 0
-            ? `${formatCurrency(outstanding)} restent à encaisser sur la période affichée.`
+            ? `${formatCurrency(outstanding)} restent à encaisser, toutes échéances confondues.`
             : "Historique des échéances de loyer."
         }
       />
@@ -234,6 +256,15 @@ export default async function PaymentsPage() {
                 )
               : undefined
           }
+        />
+      )}
+
+      {!error && (
+        <Pagination
+          page={page.number}
+          size={page.size}
+          total={count ?? 0}
+          unit="échéances"
         />
       )}
     </>

@@ -1,9 +1,11 @@
 import { EntityForm } from "@/components/entity-form";
+import { Pagination } from "@/components/pagination";
 import { PortalAccess } from "@/components/portal-access";
 import { RecordList, type RecordField } from "@/components/record-list";
 import { RowActions } from "@/components/row-actions";
 import { EmptyState, PageHeader } from "@/components/ui/kit";
 import { canManage, requireSession } from "@/lib/auth";
+import { readPage } from "@/lib/pagination";
 import { isAdminConfigured } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { Tenant } from "@/lib/types";
@@ -12,21 +14,31 @@ import { TenantFields } from "./fields";
 
 export const metadata = { title: "Locataires — ImmoOps" };
 
-export default async function TenantsPage() {
+export default async function TenantsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
   const { profile } = await requireSession();
+  const { page: pageParam } = await searchParams;
+  const page = readPage(pageParam);
   const supabase = await createClient();
 
-  const [{ data: tenants, error }, { data: portalProfiles }] = await Promise.all(
-    [
-      supabase.from("tenants").select("*").order("lastname").returns<Tenant[]>(),
+  const [{ data: tenants, error, count }, { data: portalProfiles }] =
+    await Promise.all([
+      supabase
+        .from("tenants")
+        .select("*", { count: "exact" })
+        .order("lastname")
+        .range(page.from, page.to)
+        .returns<Tenant[]>(),
       // Un locataire disposant d'un compte a un profil qui le référence.
       supabase
         .from("profiles")
         .select("tenant_id")
         .not("tenant_id", "is", null)
         .returns<{ tenant_id: string }[]>(),
-    ],
-  );
+    ]);
 
   const withAccess = new Set((portalProfiles ?? []).map((p) => p.tenant_id));
   const editable = canManage(profile.role);
@@ -109,6 +121,15 @@ export default async function TenantsPage() {
                 )
               : undefined
           }
+        />
+      )}
+
+      {!error && (
+        <Pagination
+          page={page.number}
+          size={page.size}
+          total={count ?? 0}
+          unit="locataires"
         />
       )}
     </>

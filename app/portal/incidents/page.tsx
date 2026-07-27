@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { Plus, Wrench } from "lucide-react";
 
+import { Pagination } from "@/components/pagination";
 import { Card, CardContent, EmptyState, StatusBadge } from "@/components/ui/kit";
 import { requireTenantSession } from "@/lib/auth";
+import { readPage } from "@/lib/pagination";
 import { createClient } from "@/lib/supabase/server";
 import {
   formatDate,
@@ -27,8 +29,14 @@ type Incident = {
 
 const OPEN: MaintenanceStatus[] = ["open", "in_progress"];
 
-export default async function PortalIncidentsPage() {
+export default async function PortalIncidentsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
   await requireTenantSession();
+  const { page: pageParam } = await searchParams;
+  const page = readPage(pageParam);
 
   const supabase = await createClient();
   const { data: incidents } = await supabase
@@ -70,14 +78,23 @@ export default async function PortalIncidentsPage() {
         </section>
       )}
 
+      {/* Seul l'historique est paginé. Les incidents en cours restent tous
+          visibles : ce sont eux qui appellent une action, les répartir sur
+          plusieurs pages reviendrait à en cacher. */}
       {closed.length > 0 && (
         <section>
           <h2 className="mb-2 text-sm font-semibold">Historique</h2>
           <div className="flex flex-col gap-2">
-            {closed.map((incident) => (
+            {closed.slice(page.from, page.to + 1).map((incident) => (
               <IncidentCard key={incident.id} incident={incident} />
             ))}
           </div>
+          <Pagination
+            page={page.number}
+            size={page.size}
+            total={closed.length}
+            unit="incidents clos"
+          />
         </section>
       )}
     </div>

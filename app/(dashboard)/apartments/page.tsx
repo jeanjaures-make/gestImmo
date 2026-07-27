@@ -1,8 +1,10 @@
 import { EntityForm } from "@/components/entity-form";
+import { Pagination } from "@/components/pagination";
 import { RecordList, type RecordField } from "@/components/record-list";
 import { RowActions } from "@/components/row-actions";
 import { EmptyState, PageHeader, StatusBadge } from "@/components/ui/kit";
 import { canManage, requireSession } from "@/lib/auth";
+import { readPage } from "@/lib/pagination";
 import { createClient } from "@/lib/supabase/server";
 import {
   APARTMENT_STATUS_LABELS,
@@ -17,18 +19,26 @@ export const metadata = { title: "Logements — ImmoOps" };
 
 type Row = Apartment & { buildings: Pick<Building, "name"> | null };
 
-export default async function ApartmentsPage() {
+export default async function ApartmentsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
   const { profile } = await requireSession();
+  const { page: pageParam } = await searchParams;
+  const page = readPage(pageParam);
   const supabase = await createClient();
 
-  const [{ data: apartments, error }, { data: buildings }] = await Promise.all([
-    supabase
-      .from("apartments")
-      .select("*, buildings(name)")
-      .order("created_at", { ascending: false })
-      .returns<Row[]>(),
-    supabase.from("buildings").select("id, name").order("name"),
-  ]);
+  const [{ data: apartments, error, count }, { data: buildings }] =
+    await Promise.all([
+      supabase
+        .from("apartments")
+        .select("*, buildings(name)", { count: "exact" })
+        .order("created_at", { ascending: false })
+        .range(page.from, page.to)
+        .returns<Row[]>(),
+      supabase.from("buildings").select("id, name").order("name"),
+    ]);
 
   const editable = canManage(profile.role);
   const buildingOptions = buildings ?? [];
@@ -118,6 +128,15 @@ export default async function ApartmentsPage() {
                 )
               : undefined
           }
+        />
+      )}
+
+      {!error && (
+        <Pagination
+          page={page.number}
+          size={page.size}
+          total={count ?? 0}
+          unit="logements"
         />
       )}
     </>

@@ -2,17 +2,25 @@ import {
   NotificationList,
   type NotificationItem,
 } from "@/components/notification-list";
+import { Pagination } from "@/components/pagination";
 import { requireTenantSession } from "@/lib/auth";
 import { getNotifications } from "@/lib/notifications";
+import { readPage } from "@/lib/pagination";
 import { formatRelative } from "@/lib/types";
 
 export const metadata = { title: "Notifications — ImmoOps" };
 
-export default async function PortalNotificationsPage() {
+export default async function PortalNotificationsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
   await requireTenantSession();
-  const notifications = await getNotifications();
+  const { page: pageParam } = await searchParams;
+  const page = readPage(pageParam);
+  const { items, total } = await getNotifications(page.from, page.to);
 
-  const items: NotificationItem[] = notifications.map((n) => ({
+  const notifications: NotificationItem[] = items.map((n) => ({
     id: n.id,
     kind: n.kind,
     title: n.title,
@@ -25,7 +33,13 @@ export default async function PortalNotificationsPage() {
   return (
     <div className="flex flex-col gap-4">
       <h1 className="font-heading text-xl font-semibold">Notifications</h1>
-      <NotificationList items={items} />
+      <NotificationList items={notifications} />
+      <Pagination
+        page={page.number}
+        size={page.size}
+        total={total}
+        unit="notifications"
+      />
     </div>
   );
 }

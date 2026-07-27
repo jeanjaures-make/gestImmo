@@ -50,13 +50,20 @@ export const getTenantLeases = cache(async (): Promise<PortalLease[]> => {
   return data ?? [];
 });
 
+/**
+ * Toutes les échéances du locataire.
+ *
+ * Sans borne : le solde dû et la prochaine échéance se calculent sur
+ * l'historique entier. Un plafond arbitraire — c'était 48 — faisait mentir
+ * le total dès la cinquième année de bail. Le volume reste celui d'un seul
+ * locataire, soit une ligne par mois.
+ */
 export const getTenantPayments = cache(async (): Promise<PortalPayment[]> => {
   const supabase = await createClient();
   const { data } = await supabase
     .from("rent_payments")
     .select("id, lease_id, month, amount, amount_paid, status, payment_date")
     .order("month", { ascending: false })
-    .limit(48)
     .returns<PortalPayment[]>();
 
   return data ?? [];

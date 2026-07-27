@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { Search } from "lucide-react";
 
 import { AuditDiff } from "@/components/audit-diff";
+import { Pagination } from "@/components/pagination";
 import { RecordList, type RecordField } from "@/components/record-list";
 import {
   Button,
@@ -13,6 +14,7 @@ import {
   type Tone,
 } from "@/components/ui/kit";
 import { hasRole, requireSession } from "@/lib/auth";
+import { readPage } from "@/lib/pagination";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata = { title: "Journal d'audit — ImmoOps" };
@@ -86,6 +88,7 @@ export default async function AuditPage({
     actor?: string;
     from?: string;
     to?: string;
+    page?: string;
   }>;
 }) {
   const { profile } = await requireSession();
@@ -100,15 +103,17 @@ export default async function AuditPage({
     actor = "",
     from = "",
     to = "",
+    page: pageParam,
   } = await searchParams;
 
+  const page = readPage(pageParam);
   const supabase = await createClient();
 
   let query = supabase
     .from("audit_logs")
-    .select("*")
+    .select("*", { count: "exact" })
     .order("created_at", { ascending: false })
-    .limit(200);
+    .range(page.from, page.to);
 
   if (entity) query = query.eq("entity", entity);
   if (action) query = query.eq("action", action);
@@ -117,7 +122,7 @@ export default async function AuditPage({
   // `to` est une date seule : on borne à la fin de journée.
   if (to) query = query.lte("created_at", `${to}T23:59:59.999Z`);
 
-  const [{ data: entries, error }, { data: members }] = await Promise.all([
+  const [{ data: entries, error, count }, { data: members }] = await Promise.all([
     query.returns<AuditRow[]>(),
     supabase
       .from("profiles")
@@ -290,6 +295,15 @@ export default async function AuditPage({
               ? "Aucune entrée ne correspond à ces critères."
               : "Aucune action enregistrée pour le moment."
           }
+        />
+      )}
+
+      {!error && (
+        <Pagination
+          page={page.number}
+          size={page.size}
+          total={count ?? 0}
+          unit="entrées"
         />
       )}
     </>
