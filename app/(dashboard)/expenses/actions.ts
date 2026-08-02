@@ -72,7 +72,7 @@ export async function createExpense(
   }
 
   revalidatePath("/expenses");
-  revalidatePath("/");
+  revalidatePath("/dashboard");
   return { ok: true };
 }
 
@@ -100,6 +100,6 @@ export async function updateExpense(
   if (error) return { error: error.message };
 
   revalidatePath("/expenses");
-  revalidatePath("/");
+  revalidatePath("/dashboard");
   return { ok: true };
 }

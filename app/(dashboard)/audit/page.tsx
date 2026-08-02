@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { Search } from "lucide-react";
 
 import { AuditDiff } from "@/components/audit-diff";
@@ -95,7 +96,7 @@ export default async function AuditPage({
 
   // Le RLS refuse déjà la lecture aux autres rôles ; cette redirection évite
   // d'afficher un écran vide et trompeur.
-  if (!hasRole(profile.role, "owner", "manager")) redirect("/");
+  if (!hasRole(profile.role, "owner", "manager")) redirect("/dashboard");
 
   const {
     entity = "",
@@ -260,7 +261,7 @@ export default async function AuditPage({
           Filtrer
         </Button>
         {filtering && (
-          <Button type="button" size="lg" variant="ghost" render={<a href="/audit" />}>
+          <Button type="button" size="lg" variant="ghost" render={<Link href="/audit" />}>
             Réinitialiser
           </Button>
         )}

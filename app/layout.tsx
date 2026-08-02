@@ -1,8 +1,9 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Manrope } from "next/font/google";
 
 import { Providers } from "@/components/providers";
 import { Toaster } from "@/components/ui/sonner";
+import { organizationJsonLd, SITE, softwareJsonLd } from "@/lib/site";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -34,9 +35,60 @@ const manrope = Manrope({
 });
 
 export const metadata: Metadata = {
-  title: "ImmoOps — Pilotage immobilier",
-  description:
-    "Plateforme privée de pilotage immobilier : immeubles, baux, loyers, dépenses et interventions.",
+  metadataBase: new URL(SITE.url),
+  title: {
+    default: `${SITE.name} — ${SITE.tagline}`,
+    // Les écrans de l'application posent leur propre titre ; ce gabarit
+    // leur évite de répéter la marque à chaque fois.
+    template: `%s`,
+  },
+  description: SITE.description,
+  applicationName: SITE.name,
+  authors: [{ name: SITE.name }],
+  keywords: [
+    "gestion locative",
+    "logiciel immobilier",
+    "gestion de patrimoine immobilier",
+    "portail locataire",
+    "quittance de loyer",
+    "suivi des loyers",
+  ],
+  openGraph: {
+    type: "website",
+    locale: SITE.locale,
+    url: SITE.url,
+    siteName: SITE.name,
+    title: `${SITE.name} — ${SITE.tagline}`,
+    description: SITE.description,
+    images: [
+      {
+        url: "/opengraph-image",
+        width: 1200,
+        height: 630,
+        alt: `${SITE.name} — ${SITE.tagline}`,
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: `${SITE.name} — ${SITE.tagline}`,
+    description: SITE.description,
+    images: ["/opengraph-image"],
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: { index: true, follow: true, "max-image-preview": "large" },
+  },
+};
+
+export const viewport: Viewport = {
+  // Le fond suit le thème : sur mobile, la barre d'adresse s'y accorde au
+  // lieu de trancher avec la page.
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#fafaf8" },
+    { media: "(prefers-color-scheme: dark)", color: "#14181d" },
+  ],
 };
 
 export default function RootLayout({
@@ -52,6 +104,17 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} ${manrope.variable} h-full antialiased`}
     >
       <body className="min-h-full">
+        {/* JSON-LD : décrit l'éditeur et le logiciel aux moteurs. Placé
+            dans le corps plutôt que dans <head>, ce que la spécification
+            autorise et que Next rend plus simple à composer. */}
+        <script
+          type="application/ld+json"
+          // Contenu constant, produit par nous : aucune donnée utilisateur
+          // n'y transite, donc aucune injection possible.
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify([organizationJsonLd(), softwareJsonLd()]),
+          }}
+        />
         <Providers>
           {children}
           <Toaster position="bottom-right" />

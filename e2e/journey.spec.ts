@@ -92,7 +92,7 @@ test("de l'inscription à la remise en location du logement", async ({
   await page.getByLabel("Prénom", { exact: true }).fill("Awa");
   await page.getByLabel("Nom", { exact: true }).fill("Diallo");
   await page.getByRole("button", { name: "Créer l'organisation" }).click();
-  await page.waitForURL("**/");
+  await page.waitForURL("**/dashboard");
   await expect(page.getByRole("heading", { name: "Vue d'ensemble" })).toBeVisible();
 
   // --------------------------------------------------------- 3. Immeuble
@@ -203,7 +203,7 @@ test("de l'inscription à la remise en location du logement", async ({
   await page.getByLabel("Adresse e-mail").fill(ownerEmail);
   await page.getByLabel("Mot de passe").fill(TEST_PASSWORD);
   await page.getByRole("button", { name: "Se connecter" }).click();
-  await page.waitForURL("**/");
+  await page.waitForURL("**/dashboard");
 
   await page.goto("/payments");
   await expect(shown(page, /Règlements déclarés/)).toBeVisible();

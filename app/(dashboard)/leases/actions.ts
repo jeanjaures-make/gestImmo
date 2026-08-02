@@ -11,7 +11,7 @@ function revalidateAll() {
   revalidatePath("/leases");
   revalidatePath("/apartments");
   revalidatePath("/payments");
-  revalidatePath("/");
+  revalidatePath("/dashboard");
 }
 
 export async function createLease(

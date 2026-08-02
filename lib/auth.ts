@@ -92,7 +92,7 @@ export async function requireTenantSession(): Promise<
   const session = await getSession();
   if (session === null) redirect("/login");
   if (session === "no-profile") redirect("/onboarding");
-  if (!session.tenantId) redirect("/");
+  if (!session.tenantId) redirect("/dashboard");
   return session as Session & { tenantId: string };
 }
 

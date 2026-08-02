@@ -1,4 +1,5 @@
 import { FileDown, Search } from "lucide-react";
+import Link from "next/link";
 
 import { DocumentActions } from "@/components/document-actions";
 import {
@@ -214,7 +215,7 @@ export default async function DocumentsPage({
           Filtrer
         </Button>
         {filtering && (
-          <Button type="button" size="lg" variant="ghost" render={<a href="/documents" />}>
+          <Button type="button" size="lg" variant="ghost" render={<Link href="/documents" />}>
             Réinitialiser
           </Button>
         )}

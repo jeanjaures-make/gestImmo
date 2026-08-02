@@ -30,7 +30,7 @@ export async function createBuilding(
   if (error) return { error: error.message };
 
   revalidatePath("/buildings");
-  revalidatePath("/");
+  revalidatePath("/dashboard");
   return { ok: true };
 }
 
@@ -58,6 +58,6 @@ export async function updateBuilding(
   if (error) return { error: error.message };
 
   revalidatePath("/buildings");
-  revalidatePath("/");
+  revalidatePath("/dashboard");
   return { ok: true };
 }

@@ -29,7 +29,7 @@ export const metadata = { title: "Équipe — ImmoOps" };
 
 export default async function TeamPage() {
   const { profile, organization, userId } = await requireSession();
-  if (!canAdminister(profile.role)) redirect("/");
+  if (!canAdminister(profile.role)) redirect("/dashboard");
 
   const supabase = await createClient();
   const { data: members, error } = await supabase

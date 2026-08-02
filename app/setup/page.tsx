@@ -1,4 +1,5 @@
 import { AlertTriangle, Building2, CheckCircle2, XCircle } from "lucide-react";
+import Link from "next/link";
 
 import { Card, CardContent } from "@/components/ui/kit";
 import { runDiagnostics, type CheckStatus } from "@/lib/diagnostics";
@@ -114,12 +115,12 @@ export default async function SetupPage() {
             </ol>
 
             {allGood && (
-              <a
+              <Link
                 href="/login"
                 className="mt-6 inline-flex h-9 items-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/80"
               >
                 Aller à la connexion
-              </a>
+              </Link>
             )}
           </CardContent>
         </Card>

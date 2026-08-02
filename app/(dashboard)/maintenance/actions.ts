@@ -30,7 +30,7 @@ export async function createMaintenance(
   if (error) return { error: error.message };
 
   revalidatePath("/maintenance");
-  revalidatePath("/");
+  revalidatePath("/dashboard");
   return { ok: true };
 }
 
@@ -60,7 +60,7 @@ export async function updateMaintenance(
   if (error) return { error: error.message };
 
   revalidatePath("/maintenance");
-  revalidatePath("/");
+  revalidatePath("/dashboard");
   return { ok: true };
 }
 
@@ -91,6 +91,6 @@ export async function updateMaintenanceStatus(
   if (error) return { error: error.message };
 
   revalidatePath("/maintenance");
-  revalidatePath("/");
+  revalidatePath("/dashboard");
   return { ok: true };
 }

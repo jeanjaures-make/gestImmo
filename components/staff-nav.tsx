@@ -7,7 +7,7 @@ import { Building2, LayoutDashboard, Users, Wallet, Wrench } from "lucide-react"
 import { cn } from "@/lib/utils";
 
 const NAV = [
-  { href: "/", label: "Accueil", icon: LayoutDashboard },
+  { href: "/dashboard", label: "Accueil", icon: LayoutDashboard },
   { href: "/buildings", label: "Immeubles", icon: Building2 },
   { href: "/tenants", label: "Locataires", icon: Users },
   { href: "/payments", label: "Loyers", icon: Wallet },
@@ -34,7 +34,7 @@ export function StaffNav() {
       <ul className="flex items-stretch">
         {NAV.map(({ href, label, icon: Icon }) => {
           const active =
-            href === "/" ? pathname === "/" : pathname.startsWith(href);
+            href === "/dashboard" ? pathname === href : pathname.startsWith(href);
 
           return (
             <li key={href} className="flex-1">

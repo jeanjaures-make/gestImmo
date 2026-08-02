@@ -38,5 +38,5 @@ export async function createOrganization(
   if (error) return { error: error.message };
 
   revalidatePath("/", "layout");
-  redirect("/");
+  redirect("/dashboard");
 }

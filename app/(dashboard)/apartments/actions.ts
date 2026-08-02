@@ -42,7 +42,7 @@ export async function createApartment(
   }
 
   revalidatePath("/apartments");
-  revalidatePath("/");
+  revalidatePath("/dashboard");
   return { ok: true };
 }
 
@@ -77,6 +77,6 @@ export async function updateApartment(
 
   revalidatePath("/apartments");
   revalidatePath("/leases");
-  revalidatePath("/");
+  revalidatePath("/dashboard");
   return { ok: true };
 }

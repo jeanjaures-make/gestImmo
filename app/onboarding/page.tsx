@@ -14,7 +14,7 @@ export default async function OnboardingPage() {
   const session = await getSession();
   if (session === null) redirect("/login");
   // Déjà rattaché à une organisation : rien à faire ici.
-  if (session !== "no-profile") redirect("/");
+  if (session !== "no-profile") redirect("/dashboard");
 
   return (
     <main className="flex min-h-screen items-center justify-center p-6">

@@ -10,7 +10,7 @@ import { firstIssue, formDataToObject, paymentSchema } from "@/lib/validation";
 
 function revalidateAll() {
   revalidatePath("/payments");
-  revalidatePath("/");
+  revalidatePath("/dashboard");
 }
 
 /**

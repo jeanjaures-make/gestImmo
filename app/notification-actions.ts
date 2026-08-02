@@ -41,6 +41,6 @@ export async function markNotificationsRead(
   revalidatePath("/notifications");
   revalidatePath("/portal/notifications");
   revalidatePath("/portal");
-  revalidatePath("/");
+  revalidatePath("/dashboard");
   return { ok: true };
 }

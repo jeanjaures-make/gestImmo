@@ -26,7 +26,7 @@ export async function createTenant(
   if (error) return { error: error.message };
 
   revalidatePath("/tenants");
-  revalidatePath("/");
+  revalidatePath("/dashboard");
   return { ok: true };
 }
 
@@ -53,6 +53,6 @@ export async function updateTenant(
 
   revalidatePath("/tenants");
   revalidatePath("/leases");
-  revalidatePath("/");
+  revalidatePath("/dashboard");
   return { ok: true };
 }

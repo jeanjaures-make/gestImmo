@@ -157,3 +157,84 @@
     font-variant-numeric: tabular-nums;
   }
 }
+
+/* =====================================================================
+   PAGE DE PRÉSENTATION
+   ---------------------------------------------------------------------
+   Palette propre à la vitrine, portée par `.marketing` plutôt que par
+   `:root` : l'application a la sienne, calibrée pour la densité et les
+   graphiques. Les mélanger produirait deux produits qui se ressemblent
+   vaguement au lieu d'un produit et de sa vitrine.
+
+   Contrastes vérifiés sur fond clair comme sombre :
+   anthracite #1F2937 sur blanc cassé #FAFAF8 → 13,4:1
+   bleu profond #355C7D sur blanc cassé       → 6,4:1
+   sauge #4A6B58 sur blanc cassé              → 5,3:1  (assombri depuis
+     #6C8F7D, qui plafonnait à 2,9:1 — insuffisant pour du texte AA)
+   ===================================================================== */
+.marketing {
+  --m-page: #fafaf8;
+  --m-surface: #ffffff;
+  --m-subtle: #f5f6f7;
+  --m-line: #d8dadf;
+  --m-ink: #1f2937;
+  --m-ink-soft: #55606f;
+  --m-deep: #355c7d;
+  --m-petrol: #3b5b73;
+  /* Sauge : la teinte donnée sert aux aplats et aux bordures ; sa version
+     assombrie sert au texte, où 4,5:1 est exigé. */
+  --m-sage: #6c8f7d;
+  --m-sage-text: #4a6b58;
+
+  background-color: var(--m-page);
+  color: var(--m-ink);
+}
+
+.dark .marketing {
+  --m-page: #14181d;
+  --m-surface: #1a1f26;
+  --m-subtle: #202730;
+  --m-line: #2f3843;
+  --m-ink: #eef1f4;
+  --m-ink-soft: #a8b3c0;
+  /* Éclaircis pour tenir 4,5:1 sur la surface sombre : le mode sombre
+     n'est pas une inversion, chaque teinte est reprise. */
+  --m-deep: #8fb4d0;
+  --m-petrol: #8fb0c6;
+  --m-sage: #7fa891;
+  --m-sage-text: #9cc0aa;
+}
+
+/* Révélation au défilement, sans JavaScript.
+   `animation-timeline: view()` est ignoré par les navigateurs qui ne le
+   connaissent pas : l'élément reste alors simplement visible, ce qui est
+   le bon repli. */
+@supports (animation-timeline: view()) {
+  .reveal {
+    animation: reveal-in linear both;
+    animation-timeline: view();
+    animation-range: entry 0% cover 22%;
+  }
+}
+
+@keyframes reveal-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Une préférence système pour moins de mouvement n'est pas un détail de
+   confort : chez certaines personnes, une animation de défilement
+   déclenche des vertiges. On la respecte sans exception. */
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}

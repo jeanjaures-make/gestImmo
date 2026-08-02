@@ -29,7 +29,7 @@ type NavItem = {
 };
 
 const NAV: NavItem[] = [
-  { href: "/", label: "Vue d'ensemble", icon: LayoutDashboard },
+  { href: "/dashboard", label: "Vue d'ensemble", icon: LayoutDashboard },
   { href: "/buildings", label: "Immeubles", icon: Building2 },
   { href: "/apartments", label: "Logements", icon: DoorOpen },
   { href: "/tenants", label: "Locataires", icon: Users },
@@ -75,7 +75,7 @@ export function Sidebar({
 
       {items.map(({ href, label, icon: Icon }) => {
         const active =
-          href === "/" ? pathname === "/" : pathname.startsWith(href);
+          href === "/dashboard" ? pathname === href : pathname.startsWith(href);
 
         return (
           <Link

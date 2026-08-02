@@ -64,7 +64,7 @@ export async function signIn(
   if (error) return { error: "Identifiants incorrects." };
 
   revalidatePath("/", "layout");
-  redirect("/");
+  redirect("/dashboard");
 }
 
 export async function signUp(
@@ -157,5 +157,5 @@ export async function updatePassword(
   if (error) return { error: error.message };
 
   revalidatePath("/", "layout");
-  redirect("/");
+  redirect("/dashboard");
 }
