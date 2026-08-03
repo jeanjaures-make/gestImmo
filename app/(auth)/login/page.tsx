@@ -47,7 +47,7 @@ export default async function LoginPage({
           Pas encore de compte ?{" "}
           <Link
             href="/signup"
-            className="text-primary underline-offset-4 hover:underline"
+            className="text-primary underline underline-offset-4"
           >
             Créer une organisation
           </Link>

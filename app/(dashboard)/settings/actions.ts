@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 
 import { authorize, requireSession } from "@/lib/auth";
 import { LOGO_MAX_BYTES, LOGO_TYPES } from "@/lib/logo";
+import { NOTIFICATION_PREFERENCES } from "@/lib/notifications";
 import { reportError } from "@/lib/observability";
 import { callerKey, rateLimit } from "@/lib/rate-limit";
 import { createClient } from "@/lib/supabase/server";
@@ -86,6 +87,39 @@ export async function changePassword(
   });
   if (error) return { error: error.message };
 
+  return { ok: true };
+}
+
+/**
+ * Types de notification que le compte ne veut plus voir.
+ *
+ * Les cases cochées désignent ce que l'on GARDE : c'est le sens naturel
+ * d'une case à cocher, et l'inverse — cocher pour couper — se lit de
+ * travers une fois sur deux. On enregistre donc le complément.
+ */
+export async function updateNotificationPreferences(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const session = await requireSession();
+
+  const gardés = new Set(formData.getAll("kinds").map(String));
+  const mutés = NOTIFICATION_PREFERENCES.map((p) => p.kind).filter(
+    (kind) => !gardés.has(kind),
+  );
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("profiles")
+    .update({ muted_notifications: mutés })
+    .eq("id", session.userId);
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/settings");
+  // La pastille du bandeau vit dans le layout : sans cela, elle continuerait
+  // d'annoncer des notifications qu'on vient de couper.
+  revalidatePath("/", "layout");
   return { ok: true };
 }
 

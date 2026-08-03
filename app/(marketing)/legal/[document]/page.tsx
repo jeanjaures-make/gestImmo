@@ -1,65 +1,27 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { FileText } from "lucide-react";
+import { PenLine } from "lucide-react";
 
 import { Panel, Section, SecondaryLink } from "@/components/marketing/ui";
+import {
+  countTodos,
+  DOCUMENTS,
+  isDraft,
+  type Block,
+  type Slug,
+} from "@/lib/legal";
 import { SITE } from "@/lib/site";
 
 /**
  * Pages légales.
  *
- * Volontairement à l'état de squelette, et le disant. Le pied de page les
- * référence : les laisser en 404 donnerait l'impression d'un site
- * négligé, mais publier des mentions légales inventées serait pire — ces
- * textes engagent juridiquement l'éditeur et doivent être rédigés par
- * lui, avec ses coordonnées réelles et son conseil.
- *
- * Le squelette liste ce que chaque document doit contenir, pour que la
- * rédaction n'ait plus qu'à remplir.
+ * Le fond est rédigé — il décrit ce que le logiciel fait réellement des
+ * données, ce que personne d'autre que l'auteur du code ne peut écrire avec
+ * exactitude. L'identité de l'éditeur, elle, ne s'invente pas : elle reste
+ * signalée en clair, et tant qu'il en subsiste, la page se déclare comme un
+ * projet et refuse l'indexation. Un texte juridique incomplet qui se
+ * présenterait comme définitif serait pire qu'une page absente.
  */
-const DOCUMENTS = {
-  "mentions-legales": {
-    title: "Mentions légales",
-    intro:
-      "Informations sur l'éditeur du site, son hébergeur et les conditions d'utilisation.",
-    todo: [
-      "Dénomination sociale, forme juridique et capital",
-      "Adresse du siège, numéro RCS et TVA intracommunautaire",
-      "Nom du directeur de la publication",
-      "Coordonnées de l'hébergeur",
-      "Contact et médiation de la consommation",
-    ],
-  },
-  confidentialite: {
-    title: "Politique de confidentialité",
-    intro:
-      "Traitement des données personnelles des utilisateurs et de leurs locataires.",
-    todo: [
-      "Responsable de traitement et finalités",
-      "Catégories de données et bases légales",
-      "Sous-traitants et localisation de l'hébergement",
-      "Durées de conservation",
-      "Droits des personnes et modalités d'exercice",
-      "Coordonnées du délégué à la protection des données",
-    ],
-  },
-  cgu: {
-    title: "Conditions générales d'utilisation",
-    intro: "Règles d'accès et d'usage de la plateforme.",
-    todo: [
-      "Objet et champ d'application",
-      "Comptes, rôles et responsabilités",
-      "Disponibilité du service et maintenance",
-      "Propriété intellectuelle",
-      "Limitation de responsabilité",
-      "Résiliation, réversibilité et sort des données",
-      "Droit applicable et juridiction compétente",
-    ],
-  },
-} as const;
-
-type Slug = keyof typeof DOCUMENTS;
-
 export function generateStaticParams() {
   return Object.keys(DOCUMENTS).map((document) => ({ document }));
 }
@@ -76,9 +38,60 @@ export async function generateMetadata({
   return {
     title: `${entry.title} — ${SITE.name}`,
     description: entry.intro,
-    // Un document non rédigé n'a rien à faire dans un index de recherche.
-    robots: { index: false, follow: true },
+    // Un texte encore incomplet n'a rien à faire dans un index de recherche.
+    robots: isDraft(entry) ? { index: false, follow: true } : undefined,
   };
+}
+
+function Blocks({ blocks }: { blocks: Block[] }) {
+  return (
+    <>
+      {blocks.map((block, index) => {
+        if (block.kind === "paragraph") {
+          return (
+            <p
+              key={index}
+              className="mt-4 leading-relaxed text-[var(--m-ink-soft)]"
+            >
+              {block.text}
+            </p>
+          );
+        }
+
+        if (block.kind === "list") {
+          return (
+            <ul key={index} className="mt-4 space-y-2">
+              {block.items.map((item) => (
+                <li key={item} className="flex gap-2.5 leading-relaxed">
+                  <span
+                    aria-hidden
+                    className="mt-2.5 size-1.5 shrink-0 rounded-full bg-[var(--m-sage)]"
+                  />
+                  <span className="text-[var(--m-ink-soft)]">{item}</span>
+                </li>
+              ))}
+            </ul>
+          );
+        }
+
+        return (
+          <p
+            key={index}
+            className="mt-4 flex gap-3 rounded-lg border border-dashed border-[var(--m-line)] bg-[var(--m-subtle)] p-4 leading-relaxed"
+          >
+            <PenLine
+              aria-hidden
+              className="mt-0.5 size-4 shrink-0 text-[var(--m-sage-text)]"
+            />
+            <span>
+              <strong className="font-medium">À compléter — </strong>
+              <span className="text-[var(--m-ink-soft)]">{block.text}</span>
+            </span>
+          </p>
+        );
+      })}
+    </>
+  );
 }
 
 export default async function LegalDocumentPage({
@@ -90,6 +103,8 @@ export default async function LegalDocumentPage({
   const entry = DOCUMENTS[document as Slug];
   if (!entry) notFound();
 
+  const todos = countTodos(entry);
+
   return (
     <Section className="py-16 sm:py-24">
       <div className="max-w-2xl">
@@ -100,41 +115,41 @@ export default async function LegalDocumentPage({
           {entry.intro}
         </p>
 
-        <Panel className="mt-10 p-6">
-          <div className="flex items-center gap-3">
-            <span className="flex size-9 items-center justify-center rounded-lg bg-[var(--m-sage)]/12 text-[var(--m-sage-text)]">
-              <FileText className="size-4" />
-            </span>
+        {todos > 0 && (
+          <Panel className="mt-8 p-5">
             <h2 className="font-heading font-semibold">
-              Document en cours de rédaction
+              Projet — non opposable en l&apos;état
             </h2>
-          </div>
-          <p className="mt-3 leading-relaxed text-[var(--m-ink-soft)]">
-            Ce texte engage juridiquement l&apos;éditeur : il est rédigé avec
-            son conseil plutôt que généré. En attendant sa publication, voici
-            les points qu&apos;il couvrira.
-          </p>
-          <ul className="mt-5 space-y-2.5 text-sm">
-            {entry.todo.map((item) => (
-              <li key={item} className="flex gap-2.5">
-                <span
-                  aria-hidden
-                  className="mt-2 size-1.5 shrink-0 rounded-full bg-[var(--m-sage)]"
-                />
-                {item}
-              </li>
-            ))}
-          </ul>
-          <p className="mt-6 text-sm text-[var(--m-ink-soft)]">
-            Une question d&apos;ici là ?{" "}
-            <a
-              href={`mailto:${SITE.contact}`}
-              className="font-medium text-[var(--m-deep)] underline underline-offset-4"
-            >
-              {SITE.contact}
-            </a>
-          </p>
-        </Panel>
+            <p className="mt-2 leading-relaxed text-[var(--m-ink-soft)]">
+              Ce texte décrit fidèlement le fonctionnement de la plateforme,
+              mais {todos === 1 ? "un point reste" : `${todos} points restent`}{" "}
+              à compléter par l&apos;éditeur, et l&apos;ensemble doit être relu
+              par un conseil avant toute commercialisation. Les passages
+              concernés sont signalés ci-dessous.
+            </p>
+          </Panel>
+        )}
+
+        <div className="mt-10 space-y-10">
+          {entry.sections.map((section) => (
+            <section key={section.heading}>
+              <h2 className="font-heading text-xl font-semibold tracking-tight">
+                {section.heading}
+              </h2>
+              <Blocks blocks={section.blocks} />
+            </section>
+          ))}
+        </div>
+
+        <p className="mt-10 text-sm text-[var(--m-ink-soft)]">
+          Une question ?{" "}
+          <a
+            href={`mailto:${SITE.contact}`}
+            className="font-medium text-[var(--m-deep)] underline underline-offset-4"
+          >
+            {SITE.contact}
+          </a>
+        </p>
 
         <div className="mt-8">
           <SecondaryLink href="/">Retour à l&apos;accueil</SecondaryLink>

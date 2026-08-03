@@ -153,9 +153,14 @@ déclaration créée et validée par le webhook plutôt que par un humain.
 ## Réglages et exports
 
 `/settings` réunit ce qui relève du compte plutôt que du parc : nom affiché,
-changement de mot de passe **sans quitter l'application**, connexions
-récentes, fermeture de toutes les sessions, et — pour un propriétaire — le
-nom et le logo de l'organisation.
+changement de mot de passe **sans quitter l'application**, types de
+notification que l'on souhaite recevoir, connexions récentes, fermeture de
+toutes les sessions, et — pour un propriétaire — le nom et le logo de
+l'organisation.
+
+Couper un type de notification agit à la lecture, pas à l'écriture : la
+notification est créée quoi qu'il arrive. Le réactiver fait donc réapparaître
+l'historique, au lieu d'un trou correspondant à la période coupée.
 
 Le changement de mot de passe redemande l'ancien, ce que Supabase n'exige
 pas. Sans cette ressaisie, une session laissée ouverte sur un poste partagé
@@ -274,6 +279,14 @@ contre la surface sombre — ce n'est pas une inversion automatique.
 
 ## Limites connues
 
+- **Aucune facturation de l'abonnement** : la page de tarifs affiche un
+  prix, mais rien ne le perçoit. L'inscription est libre et gratuite. Une
+  facturation manuelle convient à un lancement restreint ; au-delà, il
+  faudra un mécanisme.
+- **Documents légaux à l'état de projet** : le fond est rédigé et décrit
+  fidèlement le traitement des données, mais l'identité de l'éditeur reste
+  à compléter et l'ensemble doit être relu par un conseil. Les pages le
+  disent et refusent l'indexation tant que des points subsistent.
 - **Pas de paiement en ligne** : le locataire déclare son règlement, un
   gestionnaire le valide (§ Paiement du loyer). Le raccordement d'un
   prestataire est prévu par la structure, pas encore fait.

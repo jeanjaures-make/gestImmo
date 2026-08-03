@@ -63,7 +63,7 @@ export default async function DashboardLayout({
           <form action="/auth/signout" method="post">
             <Button variant="outline" type="submit">
               <LogOut className="size-4" />
-              <span className="hidden sm:inline">Déconnexion</span>
+              <span className="sr-only sm:not-sr-only">Déconnexion</span>
             </Button>
           </form>
         </header>

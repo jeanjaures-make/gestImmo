@@ -38,6 +38,19 @@
   --success: #157f4a;
   --warning: #a86e0a;
 
+  /* Teinte du texte des pastilles de statut.
+     Une pastille écrit sa couleur sur un fond de cette même couleur à 15 %,
+     ce qui rapproche les deux et fait chuter le contraste. Mesuré par
+     axe-core sur les écrans réels : succès 4,12:1, danger 3,80:1,
+     avertissement 3,62:1 — sous le seuil de 4,5:1 exigé pour du texte de
+     12 px. Ces variantes assombries tiennent 5:1, marge comprise, sur les
+     deux surfaces où une pastille se pose (carte et ligne de tableau).
+     En mode sombre la question ne se pose pas : la teinte claire sur fond
+     sombre mesure déjà 4,9:1 ou mieux. */
+  --success-on-tint: #126e40;
+  --warning-on-tint: #865808;
+  --destructive-on-tint: #b6191e;
+
   /* Séries de graphiques. Ordre fixe, jamais recyclé au-delà de 5 séries.
      Valeurs vérifiées par scripts/validate_palette.js : bande de luminance,
      plancher de chroma, séparation deutan/protan/tritan sur les paires
@@ -85,6 +98,12 @@
   --success: #3fae77;
   --warning: #d29a35;
 
+  /* Sur fond sombre, la teinte de statut contraste déjà : on la reprend
+     telle quelle plutôt que d'introduire une seconde valeur à maintenir. */
+  --success-on-tint: var(--success);
+  --warning-on-tint: var(--warning);
+  --destructive-on-tint: var(--destructive);
+
   /* Le mode sombre n'est pas une inversion du mode clair : ces valeurs ont
      été revalidées contre la surface sombre. */
   --chart-1: #5c8ae6;
@@ -124,6 +143,9 @@
   --color-ring: var(--ring);
   --color-success: var(--success);
   --color-warning: var(--warning);
+  --color-success-on-tint: var(--success-on-tint);
+  --color-warning-on-tint: var(--warning-on-tint);
+  --color-destructive-on-tint: var(--destructive-on-tint);
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);

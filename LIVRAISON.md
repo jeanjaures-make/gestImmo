@@ -76,13 +76,36 @@ Pour réactiver la confirmation d'e-mail à l'inscription une fois le SMTP en
 place : poser `AUTH_REQUIRE_EMAIL_CONFIRMATION=true`. Aucun code à
 réécrire, voir [`lib/auth-config.ts`](lib/auth-config.ts).
 
-### Suivi d'erreurs — recommandé
+### Suivi d'erreurs — une variable suffit
 
-[`lib/observability.ts`](lib/observability.ts) journalise déjà les erreurs
-critiques avec une référence, sur la sortie serveur que Vercel conserve.
-Pour aller plus loin : `npm i @sentry/nextjs`, poser `SENTRY_DSN`, et
-décommenter l'appel `captureException` du module. Tant que la variable est
-absente, aucune dépendance n'est chargée et aucun appel réseau n'est fait.
+Poser `SENTRY_DSN` et c'est tout : rien à installer, rien à décommenter.
+[`lib/observability.ts`](lib/observability.ts) journalise toujours sur la
+sortie serveur que Vercel conserve, et transmet en plus à Sentry dès que la
+variable est présente.
+
+L'envoi passe par l'API d'ingestion en HTTP, sans le SDK
+([`lib/sentry-envelope.ts`](lib/sentry-envelope.ts)) : aucune dépendance à
+installer ou à maintenir, aucun poids ajouté aux déploiements qui n'ont pas
+de DSN, et rien qui puisse faire échouer un build. L'envoi n'est jamais
+attendu et son échec est ignoré — une supervision qui ralentit ou casse la
+production qu'elle observe serait un mauvais marché.
+
+Seuls des identifiants circulent : jamais un nom, une adresse ou le contenu
+d'un document. Vérifié par un test.
+
+### Accessibilité — vérifiée par un outil
+
+```
+npx playwright test e2e/accessibility.spec.ts
+```
+
+axe-core inspecte dix-sept écrans — publics et back-office peuplé —, en
+mobile et en desktop, contre les critères WCAG 2.1 niveau AA.
+
+À savoir : axe couvre environ un tiers des critères. Zéro violation
+signifie « aucun défaut mécaniquement détectable », pas « accessible ». Le
+jugement humain reste à porter sur la pertinence des textes alternatifs,
+l'ordre de tabulation et l'usage réel au lecteur d'écran.
 
 ---
 
@@ -129,7 +152,10 @@ d'équipe.
 - les fonctions qualifiées `public.` dans les policies Storage, sans
   lesquelles un locataire ne peut pas télécharger sa quittance ;
 - le `WITH CHECK` de `tenants_self_update`, qui épingle l'organisation : un
-  locataire ne déplace pas sa fiche vers un portefeuille voisin.
+  locataire ne déplace pas sa fiche vers un portefeuille voisin ;
+- la colonne `profiles.muted_notifications`, sans laquelle les préférences
+  de notification restent sans effet (l'écran fonctionne, mais rien n'est
+  enregistré).
 
 ---
 
@@ -138,9 +164,9 @@ d'équipe.
 Dans cet ordre. Les trois premières se lancent en ligne de commande.
 
 ```
-npm run test          # 40 tests : validation, pagination, règles de loyer
-npm run verify:rls    # 22 assertions de cloisonnement, contre la vraie base
-npm run test:e2e      # parcours complet, navigateur, mobile et desktop
+npm run test          # 73 tests : validation, pagination, loyers, CSV, supervision
+npm run verify:rls    # 26 assertions : cloisonnement et escalade de privilèges
+npm run test:e2e      # 36 vérifications : parcours complet + WCAG AA, mobile et desktop
 ```
 
 `verify:rls` et `test:e2e` **écrivent en base** et nettoient derrière eux :

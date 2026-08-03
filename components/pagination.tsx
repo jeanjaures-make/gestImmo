@@ -72,7 +72,7 @@ export function Pagination({
             label="Page précédente"
           >
             <ChevronLeft className="size-4" />
-            <span className="hidden sm:inline">Précédent</span>
+            <span className="sr-only sm:not-sr-only">Précédent</span>
           </PageLink>
 
           <span className="px-1 text-sm text-muted-foreground tabular-nums">
@@ -84,7 +84,7 @@ export function Pagination({
             disabled={page >= pages}
             label="Page suivante"
           >
-            <span className="hidden sm:inline">Suivant</span>
+            <span className="sr-only sm:not-sr-only">Suivant</span>
             <ChevronRight className="size-4" />
           </PageLink>
         </div>

@@ -71,11 +71,15 @@ export function Field({
 
 // Couleurs de statut, distinctes des couleurs de série : un badge « Payé »
 // ne doit jamais emprunter la teinte d'une courbe.
+//
+// Le texte n'emploie pas la teinte de statut brute mais sa variante
+// `-on-tint`, assombrie pour tenir 4,5:1 sur son propre fond à 15 %. Voir
+// le commentaire des jetons dans globals.css : mesuré, pas estimé.
 const TONES = {
   neutral: "bg-muted text-muted-foreground",
-  success: "bg-success/15 text-success",
-  warning: "bg-warning/15 text-warning",
-  danger: "bg-destructive/15 text-destructive",
+  success: "bg-success/15 text-success-on-tint",
+  warning: "bg-warning/15 text-warning-on-tint",
+  danger: "bg-destructive/15 text-destructive-on-tint",
   info: "bg-primary/12 text-primary",
 } as const;
 

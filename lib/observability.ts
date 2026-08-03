@@ -1,20 +1,25 @@
 import "server-only";
 
+import {
+  buildEnvelope,
+  eventId,
+  parseDsn,
+  type Dsn,
+} from "@/lib/sentry-envelope";
+
 /**
  * Signalement des erreurs.
  *
- * Aujourd'hui, quand un client rencontre un défaut, personne ne l'apprend
- * sauf s'il le raconte — et sans contexte. Ce module pose le point de
- * passage unique par lequel une erreur sera transmise, et fonctionne dès
- * maintenant sans aucun service tiers : il journalise sur la sortie
- * serveur, que Vercel conserve.
+ * Quand un client rencontre un défaut, personne ne l'apprend sauf s'il le
+ * raconte — et sans contexte. Ce module pose le point de passage unique par
+ * lequel toute erreur est transmise. Il journalise toujours sur la sortie
+ * serveur, que Vercel conserve, et transmet en plus à Sentry dès que
+ * `SENTRY_DSN` est renseignée.
  *
- * Le raccordement à Sentry (ou équivalent) se fait en renseignant
- * `SENTRY_DSN` et en installant `@sentry/nextjs` — voir LIVRAISON.md.
- * Tant que la variable est absente, l'application se comporte normalement :
- * aucune dépendance à charger, aucun appel réseau, aucun échec possible.
- * Une observabilité qui casse la production qu'elle observe serait un
- * mauvais marché.
+ * Tant que la variable est absente, rien ne change : aucune dépendance
+ * chargée, aucun appel réseau, aucun échec possible. Une observabilité qui
+ * casse la production qu'elle observe serait un mauvais marché — c'est
+ * aussi pourquoi l'envoi ne bloque jamais et n'est jamais attendu.
  */
 
 export type ErrorContext = {
@@ -27,8 +32,39 @@ export type ErrorContext = {
   extra?: Record<string, string | number | boolean | null>;
 };
 
+/** Décodé une seule fois : le DSN ne change pas en cours d'exécution. */
+let dsnCache: Dsn | null | undefined;
+
+function dsn(): Dsn | null {
+  if (dsnCache === undefined) dsnCache = parseDsn(process.env.SENTRY_DSN);
+  return dsnCache;
+}
+
 export function isErrorReportingConfigured() {
-  return Boolean(process.env.SENTRY_DSN);
+  return dsn() !== null;
+}
+
+/**
+ * Transmet l'événement, sans jamais faire attendre l'appelant.
+ *
+ * Aucun `await` en amont : une Server Action ne doit pas rendre sa réponse
+ * plus tard parce qu'un collecteur est lent. Le délai de garde évite qu'une
+ * requête pendante retienne la fonction serverless au-delà du raisonnable.
+ */
+function send(payload: string, target: Dsn) {
+  const abort = AbortSignal.timeout(2000);
+
+  void fetch(target.envelopeUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-sentry-envelope" },
+    body: payload,
+    signal: abort,
+    // L'envoi est accessoire : il ne doit rien retenir du cache Next.
+    cache: "no-store",
+  }).catch(() => {
+    // Collecteur injoignable. Le journal serveur, lui, a déjà tout reçu :
+    // il n'y a donc rien de perdu et rien à retenter.
+  });
 }
 
 /**
@@ -70,13 +106,24 @@ export function reportError(error: unknown, context: ErrorContext): string {
       }),
     );
 
-    // Point d'insertion du service tiers. Volontairement laissé en
-    // commentaire plutôt qu'en import conditionnel : un `import()`
-    // dynamique vers un paquet absent échouerait au build.
-    //
-    //   if (isErrorReportingConfigured()) {
-    //     Sentry.captureException(error, { tags: { reference: ref, ...context } });
-    //   }
+    const target = dsn();
+    if (target) {
+      send(
+        buildEnvelope({
+          eventId: eventId(),
+          reference: ref,
+          scope: context.scope,
+          message,
+          stack,
+          organizationId: context.organizationId,
+          userId: context.userId,
+          extra: context.extra,
+          environment: process.env.VERCEL_ENV ?? process.env.NODE_ENV ?? "development",
+          release: process.env.VERCEL_GIT_COMMIT_SHA,
+        }),
+        target,
+      );
+    }
   } catch {
     // Le signalement a échoué. Il n'y a rien de plus à tenter ici, et
     // certainement pas à lever.

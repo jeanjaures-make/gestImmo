@@ -108,7 +108,11 @@ export function GlobalSearch() {
         className="gap-2 text-muted-foreground"
       >
         <Search className="size-4" />
-        <span className="hidden sm:inline">Rechercher</span>
+        {/* `sr-only` plutôt que `hidden` : sous le seuil `sm`, le bouton se
+            réduit à son icône et n'avait plus aucun nom accessible — un
+            lecteur d'écran annonçait « bouton », rien de plus. Le libellé
+            reste donc dans le DOM, simplement masqué à l'œil. */}
+        <span className="sr-only sm:not-sr-only">Rechercher</span>
         <kbd className="hidden rounded border bg-muted px-1.5 py-0.5 font-mono text-[10px] md:inline">
           Ctrl K
         </kbd>

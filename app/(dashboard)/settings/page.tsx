@@ -13,10 +13,12 @@ import {
 } from "@/components/ui/kit";
 import { canAdminister, requireSession } from "@/lib/auth";
 import { LOGO_TYPES } from "@/lib/logo";
+import { NOTIFICATION_PREFERENCES } from "@/lib/notifications";
 import { createClient } from "@/lib/supabase/server";
 import { formatRelative, ROLE_LABELS } from "@/lib/types";
 import {
   changePassword,
+  updateNotificationPreferences,
   updateOrganization,
   updateProfile,
 } from "./actions";
@@ -82,6 +84,11 @@ export default async function SettingsPage() {
 
   const total = loginCount ?? 0;
   const shown = logins?.length ?? 0;
+
+  // La colonne peut manquer si le schéma n'a pas encore été rejoué : on
+  // retombe alors sur « rien de coupé », plutôt que sur un écran en erreur.
+  const muted = (profile as { muted_notifications?: string[] })
+    .muted_notifications ?? [];
 
   return (
     <>
@@ -151,6 +158,36 @@ export default async function SettingsPage() {
               required
             />
           </Field>
+        </SettingsForm>
+
+        {/* --------------------------------------------------- Préférences */}
+        <SettingsForm
+          title="Ce dont vous voulez être averti"
+          description="Les notifications décochées cessent d'apparaître et de compter dans la pastille. Rien n'est perdu : les réactiver fait réapparaître l'historique."
+          submitLabel="Enregistrer"
+          successMessage="Préférences enregistrées."
+          action={updateNotificationPreferences}
+        >
+          {NOTIFICATION_PREFERENCES.map(({ kind, label, hint }) => (
+            <label
+              key={kind}
+              className="flex min-h-11 items-start gap-3 sm:col-span-2"
+            >
+              <input
+                type="checkbox"
+                name="kinds"
+                value={kind}
+                defaultChecked={!muted.includes(kind)}
+                className="mt-0.5 size-4 shrink-0 accent-primary"
+              />
+              <span>
+                <span className="block text-sm font-medium">{label}</span>
+                <span className="block text-xs text-muted-foreground">
+                  {hint}
+                </span>
+              </span>
+            </label>
+          ))}
         </SettingsForm>
 
         {/* ----------------------------------------------------- Connexions */}

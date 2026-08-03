@@ -83,6 +83,16 @@ CREATE TABLE IF NOT EXISTS profiles (
 
 CREATE INDEX IF NOT EXISTS profiles_organization_id_idx ON profiles (organization_id);
 
+-- Types de notification que ce compte ne veut plus voir.
+--
+-- Le filtrage a lieu à la LECTURE, pas à l'écriture : la notification est
+-- créée quoi qu'il arrive. Un gestionnaire qui remet un type en marche
+-- retrouve alors son historique, au lieu d'un trou correspondant à la
+-- période où il l'avait coupé. Le coût de stockage est négligeable, la
+-- perte d'information ne l'est pas.
+ALTER TABLE profiles
+  ADD COLUMN IF NOT EXISTS muted_notifications TEXT[] NOT NULL DEFAULT '{}';
+
 -- ---------------------------------------------------------- BUILDINGS
 CREATE TABLE IF NOT EXISTS buildings (
   id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
