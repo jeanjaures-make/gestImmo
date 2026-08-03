@@ -285,6 +285,14 @@ export async function updatePassword(
 
   if (error) return { error: error.message };
 
+  // Chacun chez soi : un locataire qui vient d'activer son espace n'a rien
+  // à faire sur `/dashboard`, d'où il serait aussitôt renvoyé.
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("tenant_id")
+    .eq("id", user.id)
+    .maybeSingle<{ tenant_id: string | null }>();
+
   revalidatePath("/", "layout");
-  redirect("/dashboard");
+  redirect(profile?.tenant_id ? "/portal" : "/dashboard");
 }

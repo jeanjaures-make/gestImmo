@@ -1,4 +1,14 @@
-export type FormState = { error?: string; ok?: boolean };
+export type FormState = {
+  error?: string;
+  ok?: boolean;
+  /**
+   * Lien d'activation à transmettre soi-même.
+   *
+   * Renseigné par les actions qui créent un compte sans envoyer d'e-mail.
+   * C'est un identifiant : il s'affiche une fois et n'est jamais conservé.
+   */
+  link?: string;
+};
 
 /** Lit un champ texte obligatoire d'un FormData. */
 export function requiredText(formData: FormData, key: string) {

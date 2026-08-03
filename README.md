@@ -39,8 +39,8 @@ Supabase (PostgreSQL, Auth, Storage) · Zod · Recharts.
 5. Créer un compte sur `/signup`, puis nommer son organisation.
 
 6. Créer un immeuble, un logement, un locataire, puis un bail. Depuis
-   l'écran **Locataires**, « Ouvrir l'accès » envoie au locataire une
-   invitation à son espace.
+   l'écran **Locataires**, « Ouvrir l'accès » produit un lien d'activation
+   à transmettre au locataire — aucun e-mail n'est envoyé.
 
 ## Les deux applications
 
@@ -150,6 +150,36 @@ au moindre incident, un encaissement sans trace ou l'inverse.
 Le jour où un prestataire sera raccordé, il s'insérera au même endroit : une
 déclaration créée et validée par le webhook plutôt que par un humain.
 
+## Ouvrir un accès sans envoyer d'e-mail
+
+Ouvrir l'espace d'un locataire, ou inviter un collaborateur, ne déclenche
+aucun envoi. L'écran affiche un **lien d'activation** que le gestionnaire
+transmet lui-même : WhatsApp, SMS, ou de vive voix.
+
+Ce n'est pas un pis-aller. Sur le marché visé, WhatsApp atteint un locataire
+bien plus sûrement qu'une adresse e-mail qu'il consulte rarement — quand il
+en a une. Le gestionnaire connaît son locataire et sait par où le joindre ;
+l'application n'a pas à en décider à sa place. Accessoirement, cela affranchit
+la mise en service du SMTP de Supabase, dont le quota s'épuise en quelques
+envois.
+
+Le lien porte le domaine de l'application, pas celui de Supabase. Ce détail
+est structurel : `generateLink` renvoie bien une URL toute prête, mais elle
+rebondit vers nous en plaçant la session dans le *fragment* (`#access_token=…`),
+que le serveur ne reçoit jamais — le locataire retomberait sur l'écran de
+connexion sans explication. On fabrique donc le lien à partir du jeton haché
+([`lib/activation-link.ts`](lib/activation-link.ts)), vérifié côté serveur par
+[`app/auth/callback`](app/auth/callback/route.ts), qui pose les cookies comme
+pour une connexion ordinaire.
+
+Ce lien **ouvre une session** : il vaut identifiant et mot de passe réunis.
+Il n'est donc ni journalisé ni écrit en base — affiché une fois, puis oublié.
+S'il se perd, on en régénère un, ce qui invalide le précédent.
+
+Reste tributaire d'un envoi : la réinitialisation de mot de passe en
+libre-service. Sans SMTP, l'utilisateur passe par son gestionnaire, qui lui
+régénère un lien.
+
 ## Sécurité
 
 - **Le jeton est revalidé auprès du serveur Auth** par `getUser()` dans
@@ -197,8 +227,9 @@ contre la surface sombre — ce n'est pas une inversion automatique.
    porte pas de préfixe `NEXT_PUBLIC_` : elle reste côté serveur.
 3. Dans Supabase, `Authentication → URL Configuration` : ajouter l'URL de
    production en *Site URL*, et `https://<domaine>/auth/callback` aux
-   *Redirect URLs*. Sans cela, les liens d'invitation et de
-   réinitialisation retombent sur `localhost`.
+   *Redirect URLs*. Ce réglage ne concerne que la réinitialisation de mot de
+   passe en libre-service : les liens d'activation sont fabriqués par
+   l'application sur son propre domaine et s'en passent.
 4. Vérifier `/setup` en production : le diagnostic confirme la version du
    schéma déployé.
 

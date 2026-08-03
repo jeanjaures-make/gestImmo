@@ -155,7 +155,8 @@ function checkMail(): Check {
     status: "warn",
     detail:
       "SMTP intégré de Supabase : fortement limité en débit et non prévu pour la production. " +
-      "Les invitations de locataires et de collaborateurs en dépendent entièrement. " +
+      "L'inscription et les invitations n'en dépendent plus — elles produisent un lien que vous transmettez vous-même. " +
+      "Reste tributaire d'un envoi : la réinitialisation de mot de passe en libre-service. " +
       "Raccordez un fournisseur dans Authentication → SMTP Settings, puis posez SMTP_PROVIDER_CONFIGURED=true.",
   };
 }

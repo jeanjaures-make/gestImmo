@@ -39,21 +39,42 @@ la CI, qui compile volontairement sans configuration.
    - *Site URL* : `https://<votre-domaine>`
    - *Redirect URLs* : `https://<votre-domaine>/auth/callback`
 
-   Sans cela, les liens d'invitation et de réinitialisation renvoient vers
-   `localhost`.
+   Utile pour la réinitialisation de mot de passe en libre-service, seul
+   parcours qui repasse par un lien envoyé par Supabase. Les liens
+   d'activation, eux, sont fabriqués par l'application sur son propre
+   domaine et ne dépendent pas de ce réglage.
 3. Vérifier que le bucket `documents` est **privé** (le script s'en charge,
    mais un bucket public rendrait tous les baux téléchargeables).
 
-### SMTP — bloquant pour la mise en service
+### SMTP — non bloquant
 
 `Authentication → SMTP Settings` : raccorder un fournisseur (Resend,
 Postmark, SendGrid…), puis poser `SMTP_PROVIDER_CONFIGURED=true`.
 
-**Ce point n'est pas optionnel.** Le SMTP intégré de Supabase répond
-`429 — email rate limit exceeded` après une poignée d'envois. Constaté sur
-le projet de développement : une fois le quota atteint, plus aucun compte
-ne peut être créé et plus aucun locataire ne peut être invité. Toute la
-mise en service d'un client passe par là.
+**La mise en service ne l'exige plus.** Le SMTP intégré de Supabase répond
+`429 — email rate limit exceeded` après une poignée d'envois : sur le
+projet de développement, une fois le quota atteint, plus aucun compte ne
+pouvait être créé ni aucun locataire invité. Les trois parcours qui
+en dépendaient ont donc été refaits sans envoi :
+
+| Parcours | Ce qui se passe |
+| --- | --- |
+| Inscription | Le compte est créé et la session ouverte dans la foulée. |
+| Ouverture d'un espace locataire | L'écran rend un **lien d'activation** que le gestionnaire transmet par WhatsApp, SMS ou de vive voix. |
+| Invitation d'un collaborateur | Même principe. |
+
+Ce n'est pas qu'un contournement : sur le marché visé, WhatsApp atteint un
+locataire plus sûrement qu'une adresse e-mail qu'il consulte rarement.
+
+Reste tributaire d'un envoi : **la réinitialisation de mot de passe en
+libre-service** (`/forgot-password`). Sans SMTP, un utilisateur qui a perdu
+son mot de passe doit passer par son gestionnaire, qui lui régénère un lien
+depuis la fiche locataire. C'est acceptable pour un lancement, pas à
+l'échelle — d'où le raccordement recommandé.
+
+Pour réactiver la confirmation d'e-mail à l'inscription une fois le SMTP en
+place : poser `AUTH_REQUIRE_EMAIL_CONFIRMATION=true`. Aucun code à
+réécrire, voir [`lib/auth-config.ts`](lib/auth-config.ts).
 
 ### Suivi d'erreurs — recommandé
 
@@ -97,13 +118,16 @@ npm run test:e2e      # parcours complet, navigateur, mobile et desktop
 
 Puis, sur le déploiement lui-même :
 
-- [ ] `/setup` — tout au vert, « Version du schéma : à jour », et « Envoi
-      des e-mails » sans avertissement.
-- [ ] Créer un compte sur `/signup` et recevoir l'e-mail de confirmation.
-      *C'est le test qui échoue en premier si le SMTP n'est pas raccordé.*
+- [ ] `/setup` — tout au vert et « Version du schéma : à jour ». « Envoi des
+      e-mails » reste en avertissement tant que `SMTP_PROVIDER_CONFIGURED`
+      n'est pas posé : c'est attendu, rien n'est bloqué.
+- [ ] Créer un compte sur `/signup` : l'onboarding s'ouvre immédiatement,
+      sans passer par une boîte mail.
 - [ ] Créer immeuble → logement → locataire → bail, en laissant cochée la
       génération des échéances.
-- [ ] Depuis **Locataires**, « Ouvrir l'accès » : l'invitation arrive.
+- [ ] Depuis **Locataires**, « Ouvrir l'accès » : un lien d'activation
+      s'affiche. Vérifier qu'il porte **votre** domaine, pas celui de
+      Supabase, et qu'il ouvre l'écran « Bienvenue » dans une autre fenêtre.
 - [ ] Le locataire se connecte : il voit son bail, pas ceux des autres.
 - [ ] Il déclare un règlement ; le gestionnaire le voit en tête de
       `/payments` et l'encaisse.
@@ -123,6 +147,11 @@ une régression. Une fois le fournisseur raccordé :
 ```
 E2E_EMAIL_ENABLED=1 E2E_EMAIL_DOMAIN=votredomaine.fr npm run test:e2e
 ```
+
+Le parcours d'activation d'un locataire, lui, **est** couvert : le test
+principal génère le lien depuis l'écran, vide les cookies, l'ouvre comme le
+ferait le locataire, et vérifie qu'il atterrit sur son espace et nulle part
+ailleurs.
 
 **Pas de paiement en ligne.** Le locataire déclare son règlement, un
 gestionnaire le valide. Une déclaration n'est jamais un encaissement tant

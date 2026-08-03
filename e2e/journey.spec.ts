@@ -4,7 +4,6 @@ import {
   admin,
   deleteOrganizationsNamed,
   deleteUsersMatching,
-  setPassword,
   testEmail,
   TEST_PASSWORD,
 } from "./support/admin";
@@ -141,46 +140,37 @@ test("de l'inscription à la remise en location du logement", async ({
   await expect(page.getByText(/sur \d+ échéances|\d+ échéances/)).toBeVisible();
 
   // ------------------------------------- 7. Ouverture de l'espace locataire
-  // L'invitation par e-mail n'est pas exerçable ici (voir l'en-tête) : on
-  // crée le compte comme le ferait `grantPortalAccess`, puis on vérifie que
-  // le locataire n'accède qu'à son propre périmètre.
-  const { data: org } = await admin()
-    .from("organizations")
-    .select("id")
-    .eq("name", orgName)
-    .single();
-  const { data: tenantRow } = await admin()
-    .from("tenants")
-    .select("id")
-    .eq("organization_id", org!.id)
-    .single();
+  // Par le bouton, comme un gestionnaire. Aucun e-mail ne part : l'écran
+  // rend un lien d'activation, que le test suit comme le ferait le
+  // locataire l'ayant reçu par WhatsApp.
+  await page.goto("/tenants");
+  await shownButton(page, "Ouvrir l'accès").click();
+  await page
+    .getByRole("alertdialog")
+    .getByRole("button", { name: /Générer le lien/ })
+    .click();
 
-  const { data: created, error: createErr } = await admin().auth.admin.createUser({
-    email: tenantEmail,
-    password: TEST_PASSWORD,
-    email_confirm: true,
-  });
-  if (createErr || !created?.user) throw new Error(createErr?.message ?? "compte locataire");
-  await admin().from("profiles").insert({
-    id: created.user.id,
-    organization_id: org!.id,
-    tenant_id: tenantRow!.id,
-    firstname: "Karim",
-    lastname: "Benali",
-    email: tenantEmail,
-    role: "viewer",
-  });
-  await setPassword(tenantEmail);
+  await expect(shown(page, /Lien d'activation prêt/)).toBeVisible();
+  const activationLink = await page
+    .getByLabel("Lien d'activation")
+    .first()
+    .inputValue();
+  // Le lien porte notre domaine, pas celui de Supabase : c'est ce qui permet
+  // d'ouvrir la session côté serveur plutôt que dans un fragment d'URL.
+  expect(activationLink).toContain("/auth/callback?token_hash=");
 
   // --------------------------------------- 8. Première connexion locataire
-  await page.goto("/auth/signout").catch(() => {});
   await page.context().clearCookies();
-  await page.goto("/login");
-  await page.getByLabel("Adresse e-mail").fill(tenantEmail);
-  await page.getByLabel("Mot de passe").fill(TEST_PASSWORD);
-  await page.getByRole("button", { name: "Se connecter" }).click();
+  await page.goto(activationLink);
 
-  // Un locataire ne doit jamais atterrir dans le back-office.
+  // Le lien ouvre la session et mène à l'écran de choix du mot de passe.
+  await page.waitForURL(/reset-password/);
+  await expect(shown(page, "Bienvenue")).toBeVisible();
+  await page.getByLabel("Votre mot de passe").fill(TEST_PASSWORD);
+  await page.getByLabel("Confirmation").fill(TEST_PASSWORD);
+  await page.getByRole("button", { name: "Accéder à mon espace" }).click();
+
+  // Un locataire n'atterrit jamais dans le back-office.
   await page.waitForURL("**/portal");
   await expect(shown(page, /Résidence Vallier/)).toBeVisible();
 
@@ -220,6 +210,14 @@ test("de l'inscription à la remise en location du logement", async ({
   await expect(shown(page, /Bail clôturé/)).toBeVisible();
 
   // --------------------------------- 13. Le logement redevient disponible
+  // Le statut se lit en base : le trigger l'écrit sans passer par l'écran,
+  // et c'est justement ce qu'on veut vérifier.
+  const { data: org } = await admin()
+    .from("organizations")
+    .select("id")
+    .eq("name", orgName)
+    .single();
+
   await expect
     .poll(async () => {
       const { data } = await admin()

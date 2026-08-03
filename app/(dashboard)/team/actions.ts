@@ -1,11 +1,10 @@
 "use server";
 
-import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { buildActivationLink } from "@/lib/activation-link";
 import { authorize } from "@/lib/auth";
-import { describeInviteError } from "@/lib/mailer";
 import { callerKey, rateLimit } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -48,13 +47,14 @@ export async function inviteMember(
     };
   }
 
-  const h = await headers();
-  const origin = h.get("origin") ?? `https://${h.get("host")}`;
-
-  const { data, error } = await admin.auth.admin.inviteUserByEmail(
-    parsed.data.email,
-    { redirectTo: `${origin}/auth/callback?next=/reset-password` },
-  );
+  // `generateLink` et non `inviteUserByEmail` : le lien est produit sans
+  // qu'aucun message ne parte. Le propriétaire le transmet lui-même, ce qui
+  // rend l'invitation possible sans serveur d'envoi — même raison que pour
+  // l'ouverture d'un espace locataire.
+  const { data, error } = await admin.auth.admin.generateLink({
+    type: "invite",
+    email: parsed.data.email,
+  });
 
   if (error) {
     if (/already been registered|already exists/i.test(error.message)) {
@@ -63,12 +63,19 @@ export async function inviteMember(
           "Cette adresse a déjà un compte. Elle ne peut pas rejoindre une seconde organisation.",
       };
     }
-    return { error: describeInviteError(error.message) };
+    // Aucun envoi n'a lieu ici : si Supabase refuse, c'est l'adresse
+    // elle-même qui est en cause, pas l'acheminement.
+    if (/email|address/i.test(error.message)) {
+      return { error: "Supabase a refusé cette adresse. Vérifiez sa saisie." };
+    }
+    return { error: "La génération du lien a échoué. Réessayez." };
   }
 
   // Le profil est écrit avec le client admin : il n'existe volontairement
   // aucune policy INSERT sur `profiles`, pour qu'un membre ne puisse pas
   // s'inventer un rôle.
+  if (!data?.user) return { error: "La génération du lien a échoué." };
+
   const { error: profileError } = await admin.from("profiles").insert({
     id: data.user.id,
     organization_id: auth.session.organization.id,
@@ -86,7 +93,12 @@ export async function inviteMember(
   }
 
   revalidatePath("/team");
-  return { ok: true };
+  // Le lien remonte à l'écran : c'est au propriétaire de le transmettre.
+  // Il ouvre une session, on ne l'écrit donc ni en base ni dans le journal.
+  return {
+    ok: true,
+    link: await buildActivationLink(data.properties.hashed_token, "invite"),
+  };
 }
 
 export async function updateMemberRole(

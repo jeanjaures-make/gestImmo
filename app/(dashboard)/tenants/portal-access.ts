@@ -1,33 +1,48 @@
 "use server";
 
-import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 
+import { buildActivationLink } from "@/lib/activation-link";
 import { authorize } from "@/lib/auth";
-import { describeInviteError } from "@/lib/mailer";
 import { reportError } from "@/lib/observability";
 import { callerKey, rateLimit } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import type { FormState } from "@/lib/form";
 
 /**
  * Ouverture et fermeture de l'espace locataire.
  *
- * Donner un accès suppose de créer un compte d'authentification au nom de
- * quelqu'un d'autre : seule la clé `service_role` le permet. Le profil créé
- * porte `tenant_id`, ce qui suffit — dans tout le schéma — à le distinguer
- * d'un membre du personnel : `is_staff()` devient faux, et le RLS le
- * cantonne à ses propres baux, échéances et documents.
+ * ─── Pourquoi aucun e-mail n'est envoyé ─────────────────────────────────
+ * L'invitation partait auparavant par courriel, ce qui rendait le portail
+ * — la moitié du produit — inatteignable tant qu'aucun serveur d'envoi
+ * n'était raccordé. Supabase sait produire un lien d'activation SANS
+ * l'expédier : c'est ce lien qu'on remet au gestionnaire, à charge pour
+ * lui de le transmettre.
  *
- * Le rôle `viewer` n'est pas ce qui le protège, c'est une valeur par
- * défaut sans effet sur son périmètre : les policies du personnel exigent
- * toutes `is_staff()`.
+ * Ce n'est pas un pis-aller. Sur le marché visé, WhatsApp et le SMS
+ * atteignent un locataire bien plus sûrement qu'une adresse e-mail
+ * qu'il consulte rarement — quand il en a une. Le gestionnaire connaît
+ * son locataire et sait par où le joindre ; l'application n'a pas à en
+ * décider à sa place.
+ *
+ * ─── Le lien est un identifiant ─────────────────────────────────────────
+ * Il ouvre la session de son porteur. Il n'est donc jamais écrit en base
+ * ni journalisé : il est affiché une fois au gestionnaire, puis oublié.
+ * S'il se perd, on en régénère un — c'est plus sûr que de le conserver.
  */
+export type PortalAccessState = {
+  error?: string;
+  /** Lien d'activation, à ne montrer qu'une fois. */
+  link?: string;
+  /** Nom du locataire, pour composer le message de transmission. */
+  tenantName?: string;
+  tenantPhone?: string | null;
+};
+
 export async function grantPortalAccess(
-  _prev: FormState,
+  _prev: PortalAccessState,
   formData: FormData,
-): Promise<FormState> {
+): Promise<PortalAccessState> {
   const auth = await authorize("owner", "manager");
   if (!auth.ok) return { error: auth.error };
 
@@ -36,33 +51,34 @@ export async function grantPortalAccess(
 
   const limit = await rateLimit({
     key: await callerKey("portal-access"),
-    limit: 30,
+    limit: 60,
     windowMs: 60 * 60_000,
   });
   if (!limit.ok) {
-    return { error: "Trop d'invitations envoyées. Réessayez plus tard." };
+    return { error: "Trop d'ouvertures d'accès. Réessayez plus tard." };
   }
 
   const supabase = await createClient();
 
-  // Le RLS garantit que ce locataire appartient bien à l'organisation de
-  // l'appelant : inutile de le vérifier une seconde fois côté application.
+  // Le RLS garantit que ce locataire appartient à l'organisation de
+  // l'appelant : inutile de le vérifier une seconde fois.
   const { data: tenant } = await supabase
     .from("tenants")
-    .select("id, firstname, lastname, email")
+    .select("id, firstname, lastname, email, phone")
     .eq("id", tenantId)
     .maybeSingle<{
       id: string;
       firstname: string;
       lastname: string;
       email: string | null;
+      phone: string | null;
     }>();
 
   if (!tenant) return { error: "Locataire introuvable." };
   if (!tenant.email) {
     return {
       error:
-        "Renseignez d'abord l'adresse e-mail du locataire : l'invitation lui y sera envoyée.",
+        "Renseignez d'abord une adresse e-mail : elle sert d'identifiant de connexion, même si le lien passe par un autre canal.",
     };
   }
 
@@ -82,30 +98,27 @@ export async function grantPortalAccess(
     };
   }
 
-  const h = await headers();
-  const origin = h.get("origin") ?? `https://${h.get("host")}`;
+  // `generateLink` crée le compte ET renvoie le lien, sans expédier de
+  // message : c'est la différence avec `inviteUserByEmail`.
+  const { data, error } = await admin.auth.admin.generateLink({
+    type: "invite",
+    email: tenant.email,
+  });
 
-  const { data, error } = await admin.auth.admin.inviteUserByEmail(
-    tenant.email,
-    { redirectTo: `${origin}/auth/callback?next=/reset-password` },
-  );
-
-  if (error) {
-    if (/already been registered|already exists/i.test(error.message)) {
+  if (error || !data?.user) {
+    if (error && /already been registered|already exists/i.test(error.message)) {
       return {
         error:
-          "Cette adresse a déjà un compte. Utilisez-en une autre, ou retirez d'abord le compte existant.",
+          "Cette adresse a déjà un compte. Utilisez-en une autre, ou fermez d'abord l'accès existant.",
       };
     }
-    // L'ouverture d'un accès qui échoue laisse un locataire dehors sans
-    // que personne ne le sache : on en garde une trace côté serveur.
     reportError(error, {
       scope: "grant-portal-access",
       organizationId: auth.session.organization.id,
       userId: auth.session.userId,
       extra: { tenantId },
     });
-    return { error: describeInviteError(error.message) };
+    return { error: "L'ouverture de l'accès a échoué. Réessayez." };
   }
 
   const { error: profileError } = await admin.from("profiles").insert({
@@ -119,20 +132,93 @@ export async function grantPortalAccess(
   });
 
   if (profileError) {
-    // Un compte sans profil serait orphelin : il n'atteindrait aucun
-    // écran et bloquerait toute nouvelle invitation à cette adresse.
+    // Un compte sans profil serait orphelin : il n'atteindrait aucun écran
+    // et bloquerait toute nouvelle ouverture sur cette adresse.
     await admin.auth.admin.deleteUser(data.user.id);
-    return { error: `Invitation annulée : ${profileError.message}` };
+    return { error: `Ouverture annulée : ${profileError.message}` };
   }
 
   revalidatePath("/tenants");
-  return { ok: true };
+  return {
+    link: await buildActivationLink(data.properties.hashed_token, "invite"),
+    tenantName: `${tenant.firstname} ${tenant.lastname}`,
+    tenantPhone: tenant.phone,
+  };
+}
+
+/**
+ * Produit un nouveau lien pour un accès déjà ouvert.
+ *
+ * Le premier lien expire au bout de vingt-quatre heures — durée fixée par
+ * Supabase, non par l'application — et le
+ * gestionnaire l'égare parfois avant de l'avoir transmis. Régénérer est
+ * la bonne réponse : cela invalide l'ancien plutôt que de faire circuler
+ * un lien dont personne ne sait plus où il est passé.
+ */
+export async function regeneratePortalLink(
+  _prev: PortalAccessState,
+  formData: FormData,
+): Promise<PortalAccessState> {
+  const auth = await authorize("owner", "manager");
+  if (!auth.ok) return { error: auth.error };
+
+  const tenantId = String(formData.get("tenant_id") ?? "");
+  if (!tenantId) return { error: "Locataire introuvable." };
+
+  const limit = await rateLimit({
+    key: await callerKey("portal-link"),
+    limit: 60,
+    windowMs: 60 * 60_000,
+  });
+  if (!limit.ok) {
+    return { error: "Trop de liens générés. Réessayez plus tard." };
+  }
+
+  const supabase = await createClient();
+  const { data: tenant } = await supabase
+    .from("tenants")
+    .select("id, firstname, lastname, email, phone")
+    .eq("id", tenantId)
+    .maybeSingle<{
+      id: string;
+      firstname: string;
+      lastname: string;
+      email: string | null;
+      phone: string | null;
+    }>();
+
+  if (!tenant?.email) return { error: "Locataire introuvable." };
+
+  const admin = createAdminClient();
+  if (!admin) return { error: "Clé SUPABASE_SERVICE_ROLE_KEY absente." };
+
+  // `recovery` et non `invite` : le compte existe déjà. Le lien permet au
+  // locataire de (re)choisir son mot de passe.
+  const { data, error } = await admin.auth.admin.generateLink({
+    type: "recovery",
+    email: tenant.email,
+  });
+
+  if (error || !data) {
+    reportError(error, {
+      scope: "regenerate-portal-link",
+      organizationId: auth.session.organization.id,
+      extra: { tenantId },
+    });
+    return { error: "La génération du lien a échoué. Réessayez." };
+  }
+
+  return {
+    link: await buildActivationLink(data.properties.hashed_token, "recovery"),
+    tenantName: `${tenant.firstname} ${tenant.lastname}`,
+    tenantPhone: tenant.phone,
+  };
 }
 
 export async function revokePortalAccess(
-  _prev: FormState,
+  _prev: PortalAccessState,
   formData: FormData,
-): Promise<FormState> {
+): Promise<PortalAccessState> {
   const auth = await authorize("owner", "manager");
   if (!auth.ok) return { error: auth.error };
 
@@ -156,12 +242,11 @@ export async function revokePortalAccess(
   if (error) return { error: error.message };
 
   // Supprimer le profil coupe déjà l'accès — sans organisation, la session
-  // n'atteint plus aucun écran. La suppression du compte lui-même n'est
-  // possible qu'avec la clé admin, et reste souhaitable pour libérer
-  // l'adresse e-mail en vue d'une future invitation.
+  // n'atteint plus aucun écran. Supprimer le compte lui-même exige la clé
+  // admin, et libère l'adresse pour une réouverture future.
   const admin = createAdminClient();
   if (admin) await admin.auth.admin.deleteUser(profile.id);
 
   revalidatePath("/tenants");
-  return { ok: true };
+  return {};
 }
