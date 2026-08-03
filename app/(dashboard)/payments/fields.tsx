@@ -1,4 +1,5 @@
 import { Field, Input, NativeSelect } from "@/components/ui/kit";
+import { CURRENCY_LABEL } from "@/lib/money";
 import { PAYMENT_STATUS_LABELS, type RentPayment } from "@/lib/types";
 
 export type LeaseOption = {
@@ -36,7 +37,7 @@ export function PaymentFields({
           required
         />
       </Field>
-      <Field label="Montant dû (€)">
+      <Field label={`Montant dû (${CURRENCY_LABEL})`}>
         <Input
           name="amount"
           type="number"
@@ -46,7 +47,7 @@ export function PaymentFields({
           required
         />
       </Field>
-      <Field label="Montant encaissé (€)">
+      <Field label={`Montant encaissé (${CURRENCY_LABEL})`}>
         <Input
           name="amount_paid"
           type="number"

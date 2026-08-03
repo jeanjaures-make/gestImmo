@@ -1,4 +1,5 @@
 import { Field, Input } from "@/components/ui/kit";
+import { CURRENCY_LABEL } from "@/lib/money";
 import type { Building } from "@/lib/types";
 
 /** Champs partagés par la création et l'édition d'un immeuble. */
@@ -33,7 +34,7 @@ export function BuildingFields({ building }: { building?: Building }) {
         <Input name="country" defaultValue={building?.country ?? "France"} />
       </Field>
       <Field
-        label="Valeur estimée (€)"
+        label={`Valeur estimée (${CURRENCY_LABEL})`}
         hint="Alimente le patrimoine et le rendement."
       >
         <Input

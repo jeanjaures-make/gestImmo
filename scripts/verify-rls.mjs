@@ -137,7 +137,7 @@ try {
     .select().single();
   const { data: lease } = await a.client.from("leases")
     .insert({ organization_id: a.orgId, tenant_id: tnt.id, apartment_id: apt.id,
-              rent: 1000, charges: 100, start_date: "2026-01-01" })
+              rent: 250000, charges: 25000, start_date: "2026-01-01" })
     .select().single();
   check(true, "A crée immeuble, logement, locataire et bail");
 
@@ -166,7 +166,7 @@ try {
 
   const { error: dupErr } = await a.client.from("leases").insert({
     organization_id: a.orgId, tenant_id: tnt.id, apartment_id: apt.id,
-    rent: 900, charges: 0, start_date: "2026-06-01",
+    rent: 240000, charges: 0, start_date: "2026-06-01",
   });
   check(Boolean(dupErr), "un second bail actif sur le même logement est rejeté");
 
@@ -242,7 +242,7 @@ try {
   console.log("\nDÉCLARATION ET VALIDATION D'UN RÈGLEMENT");
   const { error: declErr } = await tc.from("payment_declarations").insert({
     organization_id: a.orgId, rent_payment_id: myPays[0].id, tenant_id: tnt.id,
-    amount: 500, paid_on: "2026-01-05", method: "Virement bancaire", status: "pending",
+    amount: 100000, paid_on: "2026-01-05", method: "Virement bancaire", status: "pending",
   });
   check(!declErr, "le locataire déclare un règlement", declErr?.message);
 
@@ -262,8 +262,8 @@ try {
     const { data: after } = await admin.from("rent_payments")
       .select("status, amount_paid").eq("id", myPays[0].id).single();
     check(
-      after.status === "partial" && Number(after.amount_paid) === 500,
-      "la validation encaisse 500 € et passe l'échéance en « partiel »",
+      after.status === "partial" && Number(after.amount_paid) === 100000,
+      "la validation encaisse 100 000 F CFA et passe l'échéance en « partiel »",
       `statut ${after.status}, encaissé ${after.amount_paid}`,
     );
   }

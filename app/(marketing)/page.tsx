@@ -136,7 +136,7 @@ const SECURITY = [
 const PLANS = [
   {
     name: "Starter",
-    price: "19 €",
+    price: "3 000 F CFA",
     unit: "/ mois",
     pitch: "Pour un premier parc géré sérieusement.",
     features: [
@@ -150,7 +150,7 @@ const PLANS = [
   },
   {
     name: "Business",
-    price: "59 €",
+    price: "6 000 F CFA",
     unit: "/ mois",
     pitch: "Pour les cabinets et les parcs qui grandissent.",
     features: [
@@ -163,18 +163,22 @@ const PLANS = [
     href: "/signup",
   },
   {
-    name: "Enterprise",
-    price: "Sur mesure",
-    unit: "",
-    pitch: "Pour les family offices et sociétés de gestion.",
+    name: "Illimité",
+    price: "10 000 F CFA",
+    unit: "/ mois",
+    // Annoncé comme offre de lancement, sans prix de référence barré :
+    // afficher une remise par rapport à un tarif jamais pratiqué est une
+    // annonce trompeuse, et sanctionnée comme telle.
+    badge: "Offre de lancement",
+    pitch: "Parc et équipe sans limite, pour les family offices et sociétés de gestion.",
     features: [
       "Logements illimités",
       "Utilisateurs illimités",
+      "Journal d'audit complet",
       "Accompagnement à la reprise de données",
-      "Engagement de service",
     ],
-    cta: "Réserver une démonstration",
-    href: "mailto:contact@immoops.fr?subject=Démonstration%20ImmoOps",
+    cta: "Profiter de l'offre",
+    href: "/signup",
     featured: true,
   },
 ];
@@ -435,7 +439,7 @@ export default function LandingPage() {
           align="center"
           eyebrow="Tarifs"
           title="Une offre lisible, sans engagement"
-          lead="Tous les plans incluent le portail locataire, le journal d'audit et l'hébergement en Europe."
+          lead="Tous les plans incluent le portail locataire, les quittances et l'hébergement sécurisé. Sans engagement, résiliable à tout moment."
         />
 
         <ul className="mt-12 grid gap-5 lg:grid-cols-3">
@@ -452,9 +456,9 @@ export default function LandingPage() {
                   <h3 className="font-heading text-lg font-semibold">
                     {plan.name}
                   </h3>
-                  {plan.featured && (
-                    <span className="rounded-full bg-[var(--m-deep)]/10 px-2.5 py-1 text-xs font-medium text-[var(--m-deep)]">
-                      Recommandé
+                  {"badge" in plan && plan.badge && (
+                    <span className="rounded-full bg-[var(--m-sage)]/15 px-2.5 py-1 text-xs font-medium text-[var(--m-sage-text)]">
+                      {plan.badge}
                     </span>
                   )}
                 </div>

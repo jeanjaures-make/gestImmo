@@ -7,6 +7,7 @@ import {
   Wrench,
 } from "lucide-react";
 
+import { formatCurrency } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
 /**
@@ -23,12 +24,9 @@ import { cn } from "@/lib/utils";
  * déjà le sens.
  */
 
-const money = (value: number) =>
-  new Intl.NumberFormat("fr-FR", {
-    style: "currency",
-    currency: "EUR",
-    maximumFractionDigits: 0,
-  }).format(value);
+// Même formateur que l'application : la vitrine ne doit pas afficher les
+// montants autrement que l'écran qu'elle montre.
+const money = formatCurrency;
 
 function Stat({
   label,
@@ -118,9 +116,9 @@ export function DashboardMockup({ className }: { className?: string }) {
 
         <div className="min-w-0 flex-1 p-4">
           <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-            <Stat label="Revenus du mois" value={money(18400)} hint="24 baux actifs" />
-            <Stat label="Encaissé" value={money(16900)} hint="92 % du dû" accent />
-            <Stat label="Impayés" value={money(1500)} hint="2 échéances" />
+            <Stat label="Revenus du mois" value={money(12400000)} hint="24 baux actifs" />
+            <Stat label="Encaissé" value={money(11350000)} hint="92 % du dû" accent />
+            <Stat label="Impayés" value={money(1050000)} hint="2 échéances" />
             <Stat label="Occupation" value="96 %" hint="24/25 logements" />
           </div>
 
@@ -146,9 +144,9 @@ export function DashboardMockup({ className }: { className?: string }) {
 
           <div className="mt-3 rounded-lg border border-[var(--m-line)] bg-[var(--m-surface)]">
             {[
-              ["Résidence Vallier · A12", "Loyer encaissé", money(1000)],
-              ["Le Clos des Tilleuls · B04", "Règlement déclaré", money(870)],
-              ["Résidence Vallier · C21", "Échéance en retard", money(1150)],
+              ["Résidence Vallier · A12", "Loyer encaissé", money(250000)],
+              ["Le Clos des Tilleuls · B04", "Règlement déclaré", money(180000)],
+              ["Résidence Vallier · C21", "Échéance en retard", money(320000)],
             ].map(([place, state, amount], i) => (
               <div
                 key={place}
@@ -211,9 +209,9 @@ export function OwnerPhoneScreen() {
     <div aria-hidden className="px-3 pb-3">
       <p className="px-1 pt-2 text-[11px] font-semibold">Vue d&apos;ensemble</p>
       <div className="mt-2 grid grid-cols-2 gap-2">
-        <Stat label="Revenus" value={money(18400)} />
-        <Stat label="Encaissé" value={money(16900)} accent />
-        <Stat label="Impayés" value={money(1500)} />
+        <Stat label="Revenus" value={money(12400000)} />
+        <Stat label="Encaissé" value={money(11350000)} accent />
+        <Stat label="Impayés" value={money(1050000)} />
         <Stat label="Occupation" value="96 %" />
       </div>
 
@@ -251,7 +249,7 @@ export function TenantPhoneScreen() {
 
       <div className="mt-2 rounded-xl bg-[var(--m-deep)] p-3 text-white dark:text-[#101419]">
         <p className="text-[9px] opacity-80">Loyer de février 2026</p>
-        <p className="font-heading mt-1 text-2xl font-semibold">{money(1000)}</p>
+        <p className="font-heading mt-1 text-2xl font-semibold">{money(250000)}</p>
         <p className="mt-1 text-[9px] opacity-90">À régler avant le 5</p>
       </div>
 

@@ -18,9 +18,7 @@ const PUBLIC_PATHS = [
   "/reset-password",
   "/auth",
   "/setup",
-  "/mentions-legales",
-  "/confidentialite",
-  "/cgu",
+  "/legal",
 ];
 
 /** Routes d'entrée dont un utilisateur déjà connecté n'a plus besoin. */
@@ -39,13 +37,10 @@ const GUEST_ONLY_PATHS = ["/login", "/signup", "/forgot-password"];
  * `429 — Request rate limit reached` qui touchait alors les vrais
  * utilisateurs.
  */
-const ANONYMOUS_PATHS = [
-  "/",
-  "/setup",
-  "/mentions-legales",
-  "/confidentialite",
-  "/cgu",
-];
+const ANONYMOUS_PATHS = ["/", "/setup"];
+
+/** Même logique, pour un préfixe entier : les pages légales. */
+const ANONYMOUS_PREFIXES = ["/legal/"];
 
 /**
  * Rafraîchit le jeton de session à chaque requête et protège le dashboard.
@@ -63,7 +58,10 @@ export async function updateSession(request: NextRequest) {
 
   // Sortie immédiate sur les pages identiques pour tous : aucun cookie à
   // rafraîchir, donc aucun appel au serveur d'authentification.
-  if (ANONYMOUS_PATHS.includes(pathname)) {
+  if (
+    ANONYMOUS_PATHS.includes(pathname) ||
+    ANONYMOUS_PREFIXES.some((p) => pathname.startsWith(p))
+  ) {
     return NextResponse.next({ request });
   }
 
@@ -87,11 +85,32 @@ export async function updateSession(request: NextRequest) {
     },
   });
 
-  // Ne pas remplacer par getSession() : seul getUser() revalide le jeton
-  // auprès du serveur Auth. getSession() fait confiance au cookie.
+  /**
+   * Ici, et ici seulement, on se contente de `getSession()`.
+   *
+   * Le proxy ne décide de rien d'autre qu'une redirection : envoyer un
+   * visiteur sans session vers l'écran de connexion. Ce n'est pas la
+   * frontière de sécurité — elle se trouve deux étages plus bas :
+   *
+   *   1. `requireSession()` appelle `getUser()`, qui revalide le jeton
+   *      auprès du serveur Auth avant que la page ne lise quoi que ce soit ;
+   *   2. le RLS, qui vérifie la signature du jeton à chaque requête.
+   *
+   * Un cookie forgé franchirait donc le proxy pour se heurter aussitôt à
+   * ces deux barrières : il n'obtient aucune donnée, seulement une page de
+   * connexion affichée un instant plus tard.
+   *
+   * Ce que cela évite : `getUser()` est un aller-retour réseau vers le
+   * serveur Auth. L'appeler ici EN PLUS de la page doublait le coût de
+   * chaque affichage et saturait le quota — `429 over_request_rate_limit`
+   * après quelques dizaines de navigations, y compris pour de simples
+   * préchargements de liens. `getSession()` lit le cookie localement et ne
+   * sort sur le réseau que pour renouveler un jeton expiré.
+   */
   const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    data: { session },
+  } = await supabase.auth.getSession();
+  const user = session?.user ?? null;
 
   const isPublic = PUBLIC_PATHS.some(
     (p) => pathname === p || pathname.startsWith(`${p}/`),

@@ -146,5 +146,12 @@ Supabase. Ce n'est pas du code, et cela conditionne la vente.
 libellés ont été traités par construction ; aucun audit outillé WCAG AA n'a
 été passé.
 
+**Quota d'authentification.** Supabase limite les appels de vérification
+de jeton. Le produit en consomme désormais un par affichage de page
+protégée (contre deux auparavant), mais une campagne de tests répétée
+épuise le quota et provoque des `429 over_request_rate_limit`. Après un
+enchaînement de `npm run test:e2e`, laisser le quota se reconstituer avant
+de conclure à une régression.
+
 **Sauvegardes non vérifiées.** Supabase en assure selon le forfait ; aucune
 restauration n'a été testée.

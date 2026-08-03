@@ -1,4 +1,5 @@
 import { Field, Input, NativeSelect } from "@/components/ui/kit";
+import { CURRENCY_LABEL } from "@/lib/money";
 import { EXPENSE_CATEGORY_LABELS, type Expense } from "@/lib/types";
 
 export function ExpenseFields({
@@ -44,7 +45,7 @@ export function ExpenseFields({
           required
         />
       </Field>
-      <Field label="Montant (€)">
+      <Field label={`Montant (${CURRENCY_LABEL})`}>
         <Input
           name="amount"
           type="number"

@@ -8,7 +8,7 @@ import { callerKey, rateLimit } from "@/lib/rate-limit";
 import { createClient } from "@/lib/supabase/server";
 import type { FormState } from "@/lib/form";
 import { firstIssue, formDataToObject } from "@/lib/validation";
-import { PAYMENT_METHODS } from "@/lib/types";
+import { formatCurrency, PAYMENT_METHODS } from "@/lib/types";
 
 const declarationSchema = z.object({
   rent_payment_id: z.uuid({ message: "Échéance invalide." }),
@@ -80,7 +80,7 @@ export async function declarePayment(
   const remaining = Number(payment.amount) - Number(payment.amount_paid);
   if (parsed.data.amount > remaining) {
     return {
-      error: `Le montant dépasse le reste à régler (${remaining.toFixed(2)} €).`,
+      error: `Le montant dépasse le reste à régler (${formatCurrency(remaining)}).`,
     };
   }
 

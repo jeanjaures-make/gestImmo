@@ -1,3 +1,5 @@
+import { CURRENCY } from "@/lib/money";
+
 /**
  * Identité publique du site.
  *
@@ -62,24 +64,18 @@ export function softwareJsonLd() {
     url: SITE.url,
     description: SITE.description,
     inLanguage: "fr",
-    // Deux offres publiques ; « Enterprise » est sur devis, donc absente :
-    // annoncer un prix qu'on ne pratique pas serait trompeur.
+    // Les trois offres publiques, aux prix exactement affichés sur la page.
     offers: [
-      {
-        "@type": "Offer",
-        name: "Starter",
-        price: "19",
-        priceCurrency: "EUR",
-        url: `${SITE.url}/#tarifs`,
-      },
-      {
-        "@type": "Offer",
-        name: "Business",
-        price: "59",
-        priceCurrency: "EUR",
-        url: `${SITE.url}/#tarifs`,
-      },
-    ],
+      { name: "Starter", price: "3000" },
+      { name: "Business", price: "6000" },
+      { name: "Illimité", price: "10000" },
+    ].map((offer) => ({
+      "@type": "Offer",
+      name: offer.name,
+      price: offer.price,
+      priceCurrency: CURRENCY,
+      url: `${SITE.url}/#tarifs`,
+    })),
   };
 }
 

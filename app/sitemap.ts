@@ -27,19 +27,19 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 0.3,
     },
     {
-      url: `${SITE.url}/mentions-legales`,
+      url: `${SITE.url}/legal/mentions-legales`,
       lastModified: now,
       changeFrequency: "yearly",
       priority: 0.2,
     },
     {
-      url: `${SITE.url}/confidentialite`,
+      url: `${SITE.url}/legal/confidentialite`,
       lastModified: now,
       changeFrequency: "yearly",
       priority: 0.2,
     },
     {
-      url: `${SITE.url}/cgu`,
+      url: `${SITE.url}/legal/cgu`,
       lastModified: now,
       changeFrequency: "yearly",
       priority: 0.2,

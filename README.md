@@ -84,6 +84,19 @@ Il existe parce qu'une policy RLS relue n'est pas une policy RLS testée. Un
 défaut de cloisonnement ne se voit pas à l'usage — il se voit le jour où un
 client lit les données d'un autre.
 
+## Devise
+
+Le produit compte en **francs CFA**. La devise est déclarée une seule fois,
+dans [lib/money.ts](lib/money.ts) — l'éparpiller finirait par la faire
+diverger d'un écran à l'autre.
+
+Deux francs CFA coexistent, de même valeur mais distincts : `XOF` pour la
+zone UEMOA (affiché « F CFA »), `XAF` pour la zone CEMAC (affiché
+« FCFA »). `XOF` est retenu par défaut ; basculer tient en une ligne.
+
+L'affichage omet les décimales — le franc CFA n'a pas de sous-unité en
+usage — mais la base en conserve deux, sans perte.
+
 ## Modèle multi-tenant
 
 Toutes les tables métier portent `organization_id`. Deux mécanismes
@@ -139,8 +152,14 @@ déclaration créée et validée par le webhook plutôt que par un humain.
 
 ## Sécurité
 
-- `getUser()` (et non `getSession()`) dans [proxy.ts](proxy.ts) : le jeton
-  est revalidé auprès du serveur Auth, un cookie forgé ne suffit pas.
+- **Le jeton est revalidé auprès du serveur Auth** par `getUser()` dans
+  [lib/auth.ts](lib/auth.ts), avant que la moindre page ne lise des données.
+  Le proxy, lui, se contente de `getSession()` : il ne décide que d'une
+  redirection, pas d'un accès. L'y faire revalider doublait le coût de
+  chaque affichage — un aller-retour réseau par requête, préchargements de
+  liens compris — jusqu'à saturer le quota Auth (`429`) et pénaliser les
+  vrais utilisateurs. Un cookie forgé franchit donc le proxy pour se
+  heurter aussitôt à `getUser()` puis au RLS : il n'obtient rien.
 - Protection CSRF native des Server Actions (vérification Origin/Host).
 - Validation Zod **côté serveur systématiquement**, partagée avec le client
   ([lib/validation.ts](lib/validation.ts)).

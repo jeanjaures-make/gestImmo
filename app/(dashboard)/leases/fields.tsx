@@ -1,4 +1,5 @@
 import { Field, Input, NativeSelect } from "@/components/ui/kit";
+import { CURRENCY_LABEL } from "@/lib/money";
 import { LEASE_STATUS_LABELS, type Lease } from "@/lib/types";
 
 export type TenantOption = {
@@ -47,7 +48,7 @@ export function LeaseFields({
           ))}
         </NativeSelect>
       </Field>
-      <Field label="Loyer (€)">
+      <Field label={`Loyer (${CURRENCY_LABEL})`}>
         <Input
           name="rent"
           type="number"
@@ -57,7 +58,7 @@ export function LeaseFields({
           required
         />
       </Field>
-      <Field label="Charges (€)">
+      <Field label={`Charges (${CURRENCY_LABEL})`}>
         <Input
           name="charges"
           type="number"
@@ -66,7 +67,7 @@ export function LeaseFields({
           defaultValue={lease?.charges ?? 0}
         />
       </Field>
-      <Field label="Dépôt de garantie (€)">
+      <Field label={`Dépôt de garantie (${CURRENCY_LABEL})`}>
         <Input
           name="deposit"
           type="number"

@@ -129,8 +129,8 @@ test("de l'inscription à la remise en location du logement", async ({
   await openCreationPanel(page, "Nouveau bail");
   await page.getByLabel("Locataire").selectOption({ label: "Karim Benali" });
   await page.getByLabel("Logement").selectOption({ index: 0 });
-  await page.getByLabel("Loyer (€)").fill("900");
-  await page.getByLabel("Charges (€)").fill("100");
+  await page.getByLabel("Loyer (F CFA)").fill("250000");
+  await page.getByLabel("Charges (F CFA)").fill("25000");
   await page.getByLabel("Date de début").fill("2026-01-01");
   await page.getByRole("button", { name: "Créer le bail" }).click();
   // RecordList rend la carte mobile ET la ligne de tableau ; l'une est
@@ -192,7 +192,7 @@ test("de l'inscription à la remise en location du logement", async ({
   // ------------------------------------------ 9. Déclaration d'un paiement
   await page.goto("/portal/payments");
   await shownButton(page, /J'ai réglé cette échéance/).click();
-  await page.getByLabel("Montant réglé (€)").fill("1000");
+  await page.getByLabel("Montant réglé (F CFA)").fill("275000");
   await page.getByLabel("Date du règlement").fill("2026-01-05");
   await page.getByRole("button", { name: "Envoyer la déclaration" }).click();
   await expect(shown(page, /En attente de validation/)).toBeVisible();

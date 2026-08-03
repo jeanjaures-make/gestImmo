@@ -13,7 +13,7 @@ import {
   NativeSelect,
 } from "@/components/ui/kit";
 import { declarePayment } from "@/app/portal/payments/actions";
-import { PAYMENT_METHODS } from "@/lib/types";
+import { CURRENCY_LABEL, PAYMENT_METHODS } from "@/lib/types";
 
 /**
  * Déclaration d'un règlement, dépliée dans la carte de l'échéance.
@@ -80,7 +80,7 @@ export function DeclarePayment({
         </button>
       </div>
 
-      <Field label="Montant réglé (€)">
+      <Field label={`Montant réglé (${CURRENCY_LABEL})`}>
         <Input
           name="amount"
           type="number"

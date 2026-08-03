@@ -1292,7 +1292,7 @@ BEGIN
     NEW.organization_id, 'payment_declared',
     'Paiement déclaré par un locataire',
     COALESCE(v_name, 'Un locataire') || ' déclare avoir réglé '
-      || to_char(NEW.amount, 'FM999G999G999D00') || ' €.',
+      || to_char(NEW.amount, 'FM999G999G999') || ' F CFA.',
     '/payments'
   );
   RETURN NEW;

@@ -25,9 +25,9 @@ const FOOTER = [
   {
     title: "Légal",
     links: [
-      { href: "/mentions-legales", label: "Mentions légales" },
-      { href: "/confidentialite", label: "Confidentialité" },
-      { href: "/cgu", label: "CGU" },
+      { href: "/legal/mentions-legales", label: "Mentions légales" },
+      { href: "/legal/confidentialite", label: "Confidentialité" },
+      { href: "/legal/cgu", label: "CGU" },
     ],
   },
 ];

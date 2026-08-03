@@ -271,15 +271,9 @@ export type Expense = {
 };
 
 // ----------------------------------------------------------- formatters
-const currency = new Intl.NumberFormat("fr-FR", {
-  style: "currency",
-  currency: "EUR",
-  maximumFractionDigits: 0,
-});
-
-export function formatCurrency(value: number | string | null | undefined) {
-  return currency.format(Number(value ?? 0));
-}
+// La devise est déclarée dans `lib/money.ts`. Réexportée ici pour que les
+// écrans gardent un point d'entrée unique.
+export { formatCurrency, CURRENCY_LABEL } from "@/lib/money";
 
 export function formatDate(value: string | null | undefined) {
   if (!value) return "—";
