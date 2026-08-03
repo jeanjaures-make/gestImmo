@@ -35,6 +35,12 @@ jobs:
       - name: TypeScript
         run: npx tsc --noEmit
 
+      # Attrape la classe d'erreur que le compilateur laisse passer : une
+      # valeur exportée du mauvais côté de la frontière serveur / client,
+      # qui n'éclate qu'en production.
+      - name: Frontières serveur / client
+        run: npm run check:boundaries
+
       # Ne dépendent ni de la base ni du réseau : ils tournent partout,
       # y compris sur une contribution externe sans accès aux secrets.
       - name: Tests unitaires

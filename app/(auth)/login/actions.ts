@@ -95,9 +95,17 @@ export async function signUp(
   _prev: AuthState,
   formData: FormData,
 ): Promise<AuthState> {
+  // Vingt par heure et par adresse IP, non cinq.
+  //
+  // La limite porte sur l'IP publique, or une large part des utilisateurs
+  // visés se connecte derrière le NAT d'un opérateur mobile : des centaines
+  // de personnes y partagent une seule adresse. À cinq, une agence
+  // inscrivant ses collaborateurs se bloquait elle-même, et le cabinet
+  // voisin avec elle. Vingt laisse passer l'usage légitime tout en restant
+  // sans intérêt pour une inscription automatisée, qui en veut des milliers.
   const limit = await rateLimit({
     key: await callerKey("signup"),
-    limit: 5,
+    limit: 20,
     windowMs: 60 * 60_000,
   });
   if (!limit.ok) {

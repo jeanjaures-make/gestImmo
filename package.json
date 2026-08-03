@@ -10,7 +10,8 @@
     "verify:rls": "node scripts/verify-rls.mjs",
     "test:e2e": "playwright test",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "check:boundaries": "node scripts/check-boundaries.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",

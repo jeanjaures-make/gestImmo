@@ -75,7 +75,7 @@ test("de l'inscription à la remise en location du logement", async ({
   // serveur et ouvre la session dans la foulée.
   await page.goto("/signup");
   await page.getByLabel("Adresse e-mail").fill(ownerEmail);
-  await page.getByLabel("Mot de passe", { exact: true }).fill(TEST_PASSWORD);
+  await page.getByLabel("Mot de passe").fill(TEST_PASSWORD);
   await page.getByRole("button", { name: "Créer mon compte" }).click();
 
   // Un compte sans organisation atterrit sur l'écran de création.
@@ -177,7 +177,7 @@ test("de l'inscription à la remise en location du logement", async ({
   await page.context().clearCookies();
   await page.goto("/login");
   await page.getByLabel("Adresse e-mail").fill(tenantEmail);
-  await page.getByLabel("Mot de passe", { exact: true }).fill(TEST_PASSWORD);
+  await page.getByLabel("Mot de passe").fill(TEST_PASSWORD);
   await page.getByRole("button", { name: "Se connecter" }).click();
 
   // Un locataire ne doit jamais atterrir dans le back-office.
@@ -196,7 +196,7 @@ test("de l'inscription à la remise en location du logement", async ({
   await page.context().clearCookies();
   await page.goto("/login");
   await page.getByLabel("Adresse e-mail").fill(ownerEmail);
-  await page.getByLabel("Mot de passe", { exact: true }).fill(TEST_PASSWORD);
+  await page.getByLabel("Mot de passe").fill(TEST_PASSWORD);
   await page.getByRole("button", { name: "Se connecter" }).click();
   await page.waitForURL("**/dashboard");
 

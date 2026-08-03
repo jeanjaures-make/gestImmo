@@ -170,14 +170,19 @@ export function PasswordField({
           className="h-11 pr-12"
           aria-describedby={showRules ? `${id}-rules` : undefined}
         />
+        {/* Bouton à deux états : le nom accessible reste constant, l'état
+            est porté par `aria-pressed`. C'est le motif recommandé, et il
+            évite surtout que ce bouton porte le même nom que le champ.
+            « Afficher le mot de passe » entrait en collision avec
+            « Mot de passe » — deux contrôles au nom quasi identique dans un
+            même formulaire, ce qui rend l'énoncé ambigu pour qui pilote à
+            la voix et bruyant au lecteur d'écran. */}
         <button
           type="button"
           onClick={() => setVisible((v) => !v)}
-          // Voir ce que l'on tape évite une bonne part des échecs de
-          // connexion, surtout au doigt sur un clavier de téléphone.
-          aria-label={
-            visible ? "Masquer le mot de passe" : "Afficher le mot de passe"
-          }
+          aria-pressed={visible}
+          aria-label="Afficher en clair"
+          title={visible ? "Masquer" : "Afficher en clair"}
           className="absolute inset-y-0 right-0 flex w-11 cursor-pointer items-center justify-center text-muted-foreground hover:text-foreground"
         >
           {visible ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
