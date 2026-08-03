@@ -76,3 +76,5 @@ DROP POLICY IF EXISTS documents_owner_all             ON storage.objects;
 DROP POLICY IF EXISTS documents_storage_select        ON storage.objects;
 DROP POLICY IF EXISTS documents_storage_tenant_select ON storage.objects;
 DROP POLICY IF EXISTS documents_storage_write         ON storage.objects;
+DROP POLICY IF EXISTS logos_read                       ON storage.objects;
+DROP POLICY IF EXISTS logos_write                      ON storage.objects;

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
   Bell,
@@ -50,9 +51,11 @@ const NAV: NavItem[] = [
 
 export function Sidebar({
   organizationName,
+  logoUrl,
   role,
 }: {
   organizationName: string;
+  logoUrl: string | null;
   role: UserRole;
 }) {
   const pathname = usePathname();
@@ -62,8 +65,20 @@ export function Sidebar({
     // Masquée sur mobile : la navigation y passe par la barre basse.
     <nav className="hidden bg-sidebar md:flex md:h-screen md:w-60 md:shrink-0 md:flex-col md:gap-1 md:overflow-y-auto md:border-r md:p-4">
       <div className="mb-4 flex items-center gap-2.5 px-2">
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-          <Building2 className="size-4" />
+        {/* Le logo de l'organisation, s'il en a un : c'est ce qui fait
+            qu'on se sent chez soi plutôt que dans un outil générique. */}
+        <span className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-primary text-primary-foreground">
+          {logoUrl ? (
+            <Image
+              src={logoUrl}
+              alt=""
+              width={32}
+              height={32}
+              className="size-full object-contain"
+            />
+          ) : (
+            <Building2 className="size-4" />
+          )}
         </span>
         <span className="min-w-0">
           <span className="font-heading block truncate text-sm font-semibold">

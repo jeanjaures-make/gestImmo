@@ -35,7 +35,11 @@ export default async function DashboardLayout({
 
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
-      <Sidebar organizationName={organization.name} role={profile.role} />
+      <Sidebar
+        organizationName={organization.name}
+        logoUrl={organization.logo_url}
+        role={profile.role}
+      />
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center gap-3 border-b px-6 py-3">

@@ -1449,3 +1449,43 @@ END;
 $$;
 
 GRANT EXECUTE ON FUNCTION consume_rate_limit(TEXT, INT, INT) TO anon, authenticated;
+
+-- =====================================================================
+-- LOGOS D'ORGANISATION
+--
+-- Bucket public, à la différence de `documents`. Un logo s'affiche sur
+-- chaque écran et dans les quittances : le servir par URL signée
+-- obligerait à en régénérer une à chaque rendu, pour protéger une image
+-- que l'organisation expose de toute façon à ses locataires.
+--
+-- Public en LECTURE seulement. L'écriture reste réservée au propriétaire
+-- de l'organisation, et la convention de chemin `<organization_id>/…`
+-- l'empêche de déposer quoi que ce soit sous une autre.
+-- =====================================================================
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+  'logos', 'logos', true, 1048576,
+  ARRAY['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml']
+)
+ON CONFLICT (id) DO UPDATE SET
+  public = true,
+  file_size_limit = 1048576,
+  allowed_mime_types = ARRAY['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'];
+
+DROP POLICY IF EXISTS logos_read ON storage.objects;
+CREATE POLICY logos_read ON storage.objects
+  FOR SELECT USING (bucket_id = 'logos');
+
+DROP POLICY IF EXISTS logos_write ON storage.objects;
+CREATE POLICY logos_write ON storage.objects
+  FOR ALL
+  USING (
+    bucket_id = 'logos'
+    AND (storage.foldername(name))[1] = (SELECT public.current_organization_id())::text
+    AND (SELECT public.has_role('owner'))
+  )
+  WITH CHECK (
+    bucket_id = 'logos'
+    AND (storage.foldername(name))[1] = (SELECT public.current_organization_id())::text
+    AND (SELECT public.has_role('owner'))
+  );

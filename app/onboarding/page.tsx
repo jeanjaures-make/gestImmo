@@ -18,7 +18,7 @@ export default async function OnboardingPage() {
 
   return (
     <main className="flex min-h-screen items-center justify-center p-6">
-      <div className="w-full max-w-md">
+      <div className="w-full max-w-lg">
         <div className="mb-8 flex flex-col items-center gap-2 text-center">
           <span className="flex size-11 items-center justify-center rounded-xl bg-primary text-primary-foreground">
             <Building2 className="size-6" />
@@ -32,8 +32,8 @@ export default async function OnboardingPage() {
               Créons votre organisation
             </h1>
             <p className="mb-6 text-sm text-muted-foreground">
-              Elle cloisonne l&apos;intégralité de vos données. Vous en serez
-              le propriétaire et pourrez y inviter des collaborateurs.
+              Elle cloisonne l&apos;intégralité de vos données. Vous en serez le
+              propriétaire et pourrez y inviter des collaborateurs.
             </p>
 
             <OnboardingForm />

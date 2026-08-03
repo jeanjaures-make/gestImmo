@@ -86,7 +86,7 @@ test("de l'inscription à la remise en location du logement", async ({
   await page.getByLabel("Nom de l'organisation").fill(orgName);
   await page.getByLabel("Prénom", { exact: true }).fill("Awa");
   await page.getByLabel("Nom", { exact: true }).fill("Diallo");
-  await page.getByRole("button", { name: "Créer l'organisation" }).click();
+  await page.getByRole("button", { name: "Ouvrir mon espace" }).click();
   await page.waitForURL("**/dashboard");
   await expect(page.getByRole("heading", { name: "Vue d'ensemble" })).toBeVisible();
 
@@ -177,7 +177,7 @@ test("de l'inscription à la remise en location du logement", async ({
   await page.context().clearCookies();
   await page.goto("/login");
   await page.getByLabel("Adresse e-mail").fill(tenantEmail);
-  await page.getByLabel("Mot de passe").fill(TEST_PASSWORD);
+  await page.getByLabel("Mot de passe", { exact: true }).fill(TEST_PASSWORD);
   await page.getByRole("button", { name: "Se connecter" }).click();
 
   // Un locataire ne doit jamais atterrir dans le back-office.
@@ -196,7 +196,7 @@ test("de l'inscription à la remise en location du logement", async ({
   await page.context().clearCookies();
   await page.goto("/login");
   await page.getByLabel("Adresse e-mail").fill(ownerEmail);
-  await page.getByLabel("Mot de passe").fill(TEST_PASSWORD);
+  await page.getByLabel("Mot de passe", { exact: true }).fill(TEST_PASSWORD);
   await page.getByRole("button", { name: "Se connecter" }).click();
   await page.waitForURL("**/dashboard");
 
