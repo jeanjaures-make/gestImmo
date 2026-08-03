@@ -239,6 +239,96 @@ try {
     `statut devenu ${unchanged.status}`,
   );
 
+  /**
+   * ESCALADE DE PRIVILÈGES
+   *
+   * Le RLS raisonne par lignes, jamais par colonnes. `profiles_update`
+   * autorise chacun à modifier SA ligne — pour corriger son nom — et cette
+   * permission englobait `role` et `tenant_id`. Un locataire exécutait donc
+   *
+   *   UPDATE profiles SET role='owner', tenant_id=NULL WHERE id=auth.uid()
+   *
+   * et devenait propriétaire de l'organisation qui l'héberge. Aucun écran ne
+   * proposait ce geste, mais l'API PostgREST est publique : le formulaire
+   * n'est pas la frontière. Un déclencheur fige désormais ces colonnes.
+   *
+   * Ces assertions échouent tant que `supabase/schema.sql` n'a pas été
+   * rejoué — c'est voulu : un schéma vulnérable doit faire rougir la CI.
+   */
+  console.log("\nESCALADE DE PRIVILÈGES");
+
+  await tc.from("profiles").update({ role: "owner" }).eq("id", tUser.user.id);
+  const { data: roleAfter } = await admin.from("profiles")
+    .select("role").eq("id", tUser.user.id).single();
+  check(
+    roleAfter.role === "viewer",
+    "un locataire ne peut pas se promouvoir propriétaire",
+    `rôle devenu ${roleAfter.role}`,
+  );
+
+  await tc.from("profiles").update({ tenant_id: null }).eq("id", tUser.user.id);
+  const { data: linkAfter } = await admin.from("profiles")
+    .select("tenant_id").eq("id", tUser.user.id).single();
+  check(
+    linkAfter.tenant_id === tnt.id,
+    "il ne peut pas se détacher de sa fiche pour devenir membre du personnel",
+    "tenant_id remis à NULL",
+  );
+
+  await tc.from("tenants")
+    .update({ organization_id: b.orgId }).eq("id", tnt.id);
+  const { data: orgAfter } = await admin.from("tenants")
+    .select("organization_id").eq("id", tnt.id).single();
+  check(
+    orgAfter.organization_id === a.orgId,
+    "il ne peut pas déplacer sa fiche vers une autre organisation",
+    "fiche transférée chez B",
+  );
+
+  // Le verrou ne doit pas emporter le geste légitime avec lui : sans cette
+  // assertion, on « corrigerait » la faille en cassant la gestion d'équipe.
+  const staffEmail = `verif-role-${stamp}@example.invalid`;
+  const { data: staffUser } = await admin.auth.admin.createUser({
+    email: staffEmail, password: PWD, email_confirm: true,
+  });
+  created.users.push(staffUser.user.id);
+  await admin.from("profiles").insert({
+    id: staffUser.user.id, organization_id: a.orgId,
+    firstname: "Test", lastname: "Rôle", email: staffEmail, role: "viewer",
+  });
+
+  const { error: promoteErr } = await a.client
+    .from("profiles").update({ role: "manager" }).eq("id", staffUser.user.id);
+  const { data: promoted } = await admin.from("profiles")
+    .select("role").eq("id", staffUser.user.id).single();
+  check(
+    promoted.role === "manager",
+    "un propriétaire promeut toujours un collaborateur",
+    `rôle resté ${promoted.role}${promoteErr ? ` (${promoteErr.message})` : ""}`,
+  );
+
+  // Et un simple gestionnaire ne redistribue pas les rôles.
+  const { data: viewerUser } = await admin.auth.admin.createUser({
+    email: `verif-viewer-${stamp}@example.invalid`, password: PWD, email_confirm: true,
+  });
+  created.users.push(viewerUser.user.id);
+  await admin.from("profiles").insert({
+    id: viewerUser.user.id, organization_id: a.orgId, firstname: "Sans",
+    lastname: "Droit", email: `verif-viewer-${stamp}@example.invalid`, role: "viewer",
+  });
+  const vc = createClient(URL, ANON, { auth: { persistSession: false, autoRefreshToken: false } });
+  await vc.auth.signInWithPassword({
+    email: `verif-viewer-${stamp}@example.invalid`, password: PWD,
+  });
+  await vc.from("profiles").update({ role: "owner" }).eq("id", viewerUser.user.id);
+  const { data: viewerAfter } = await admin.from("profiles")
+    .select("role").eq("id", viewerUser.user.id).single();
+  check(
+    viewerAfter.role === "viewer",
+    "un collaborateur en lecture seule ne se promeut pas non plus",
+    `rôle devenu ${viewerAfter.role}`,
+  );
+
   console.log("\nDÉCLARATION ET VALIDATION D'UN RÈGLEMENT");
   const { error: declErr } = await tc.from("payment_declarations").insert({
     organization_id: a.orgId, rent_payment_id: myPays[0].id, tenant_id: tnt.id,

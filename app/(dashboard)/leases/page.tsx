@@ -1,5 +1,6 @@
 import { CloseLease } from "@/components/close-lease";
 import { EntityForm } from "@/components/entity-form";
+import { ExportButton } from "@/components/export-button";
 import { Pagination } from "@/components/pagination";
 import { RecordList, type RecordField } from "@/components/record-list";
 import { RowActions } from "@/components/row-actions";
@@ -104,6 +105,7 @@ export default async function LeasesPage({
       <PageHeader
         title="Baux"
         description="Le contrat qui lie un locataire à un logement."
+        action={<ExportButton dataset="baux" />}
       />
 
       {editable && (

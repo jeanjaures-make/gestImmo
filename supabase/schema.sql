@@ -770,6 +770,67 @@ CREATE POLICY profiles_update ON profiles
     AND (id = (SELECT auth.uid()) OR (SELECT has_role('owner')))
   );
 
+-- Le RLS ne sait pas restreindre des COLONNES, seulement des lignes.
+--
+-- La policy ci-dessus autorise chacun à modifier sa propre ligne — ce qu'on
+-- veut, pour qu'il corrige son nom. Mais « sa propre ligne » comprend
+-- `role` et `tenant_id` : un locataire pouvait donc exécuter
+--
+--   UPDATE profiles SET role = 'owner', tenant_id = NULL WHERE id = auth.uid()
+--
+-- et devenir propriétaire de l'organisation qui l'héberge. Vérifié contre
+-- la vraie base : les deux écritures passaient. Rien dans l'application ne
+-- proposait ce geste, mais l'API PostgREST est publique — le formulaire
+-- n'est pas la frontière.
+--
+-- D'où ce déclencheur : les colonnes sensibles sont figées, sauf pour un
+-- propriétaire modifiant le rôle de QUELQU'UN D'AUTRE. Sans session
+-- utilisateur (`auth.uid()` nul), on est sur le chemin serveur muni de la
+-- clé service_role — ouverture d'un espace locataire, invitation — qui a
+-- déjà franchi ses propres gardes applicatives.
+CREATE OR REPLACE FUNCTION guard_profile_columns()
+RETURNS TRIGGER
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  actor UUID := auth.uid();
+BEGIN
+  IF actor IS NULL THEN
+    RETURN NEW;
+  END IF;
+
+  IF NEW.id IS DISTINCT FROM OLD.id
+     OR NEW.organization_id IS DISTINCT FROM OLD.organization_id THEN
+    RAISE EXCEPTION
+      'Un profil ne change ni d''identifiant ni d''organisation.'
+      USING ERRCODE = '42501';
+  END IF;
+
+  IF NEW.tenant_id IS DISTINCT FROM OLD.tenant_id THEN
+    RAISE EXCEPTION
+      'Le rattachement à une fiche locataire ne se modifie pas ainsi.'
+      USING ERRCODE = '42501';
+  END IF;
+
+  IF NEW.role IS DISTINCT FROM OLD.role THEN
+    IF actor = OLD.id THEN
+      RAISE EXCEPTION 'On ne modifie pas son propre rôle.'
+        USING ERRCODE = '42501';
+    END IF;
+    IF NOT has_role('owner') THEN
+      RAISE EXCEPTION 'Seul un propriétaire modifie les rôles.'
+        USING ERRCODE = '42501';
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS profiles_guard_columns ON profiles;
+CREATE TRIGGER profiles_guard_columns
+  BEFORE UPDATE ON profiles
+  FOR EACH ROW EXECUTE FUNCTION guard_profile_columns();
+
 -- Retirer un COLLABORATEUR est un acte d'administration : réservé au
 -- propriétaire. Fermer l'espace d'un LOCATAIRE relève de la gestion
 -- courante du parc : le gestionnaire doit pouvoir le faire, sans pour
@@ -869,11 +930,18 @@ CREATE POLICY tenants_self_select ON tenants
   FOR SELECT USING (id = (SELECT current_tenant_id()));
 
 -- Son identité et ses coordonnées lui appartiennent : il peut les corriger.
+--
+-- `organization_id` est épinglé dans le WITH CHECK : sans cela, un locataire
+-- déplaçait sa propre fiche vers une autre organisation, qui héritait d'un
+-- dossier qu'elle n'a jamais créé.
 DROP POLICY IF EXISTS tenants_self_update ON tenants;
 CREATE POLICY tenants_self_update ON tenants
   FOR UPDATE
   USING (id = (SELECT current_tenant_id()))
-  WITH CHECK (id = (SELECT current_tenant_id()));
+  WITH CHECK (
+    id = (SELECT current_tenant_id())
+    AND organization_id = (SELECT current_organization_id())
+  );
 
 DROP POLICY IF EXISTS leases_tenant_select ON leases;
 CREATE POLICY leases_tenant_select ON leases

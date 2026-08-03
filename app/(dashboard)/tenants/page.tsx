@@ -1,4 +1,5 @@
 import { EntityForm } from "@/components/entity-form";
+import { ExportButton } from "@/components/export-button";
 import { Pagination } from "@/components/pagination";
 import { PortalAccess } from "@/components/portal-access";
 import { RecordList, type RecordField } from "@/components/record-list";
@@ -77,6 +78,7 @@ export default async function TenantsPage({
       <PageHeader
         title="Locataires"
         description="Les personnes auxquelles vous rattachez un bail."
+        action={<ExportButton dataset="locataires" />}
       />
 
       {editable && (

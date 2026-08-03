@@ -1,5 +1,6 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
-import { LogOut } from "lucide-react";
+import { LogOut, Settings } from "lucide-react";
 
 import { GlobalSearch } from "@/components/global-search";
 import { NotificationBell } from "@/components/notification-bell";
@@ -45,11 +46,19 @@ export default async function DashboardLayout({
         <header className="flex items-center gap-3 border-b px-6 py-3">
           <GlobalSearch />
           <div className="flex-1" />
-          <StatusBadge tone="info">{ROLE_LABELS[profile.role]}</StatusBadge>
+          {/* Le rôle s'efface sur mobile au profit des réglages : c'est une
+              information, l'autre est un geste. Il reste lisible sur /settings. */}
+          <span className="hidden sm:inline-flex">
+            <StatusBadge tone="info">{ROLE_LABELS[profile.role]}</StatusBadge>
+          </span>
           <span className="hidden truncate text-sm text-muted-foreground sm:inline">
             {email}
           </span>
           <NotificationBell href="/notifications" count={unread} />
+          <Button variant="ghost" size="icon" render={<Link href="/settings" />}>
+            <Settings className="size-4" />
+            <span className="sr-only">Réglages</span>
+          </Button>
           <ThemeToggle />
           <form action="/auth/signout" method="post">
             <Button variant="outline" type="submit">

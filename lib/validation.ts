@@ -140,6 +140,42 @@ export const organizationSchema = z.object({
   lastname: optionalText(80),
 });
 
+/**
+ * Changement de mot de passe depuis l'application.
+ *
+ * L'ancien mot de passe est exigé, alors que Supabase ne le réclame pas.
+ * Sans lui, une session volée — un poste laissé ouvert, un cookie
+ * dérobé — suffit à changer le mot de passe et à verrouiller le
+ * propriétaire hors de son propre compte. La ressaisie fait de la session
+ * une preuve de présence plutôt qu'un blanc-seing.
+ */
+export const passwordChangeSchema = z
+  .object({
+    current: z.string().min(1, { message: "Saisissez votre mot de passe actuel." }),
+    password: passwordSchema,
+    confirm: z.string(),
+  })
+  .refine((v) => v.password === v.confirm, {
+    message: "Les deux mots de passe ne correspondent pas.",
+    path: ["confirm"],
+  })
+  .refine((v) => v.password !== v.current, {
+    message: "Le nouveau mot de passe doit différer de l'ancien.",
+    path: ["password"],
+  });
+
+/** Nom affiché du membre. L'adresse e-mail sert d'identifiant : elle ne se
+ *  change pas ici, cela déplacerait la connexion elle-même. */
+export const profileSchema = z.object({
+  firstname: optionalText(80),
+  lastname: optionalText(80),
+});
+
+/** Réglages de l'organisation. Le logo est traité à part : c'est un fichier. */
+export const organizationSettingsSchema = z.object({
+  name: text(2, 120, "Le nom de l'organisation"),
+});
+
 export const buildingSchema = z.object({
   name: text(1, 120, "Le nom"),
   address: text(1, 200, "L'adresse"),

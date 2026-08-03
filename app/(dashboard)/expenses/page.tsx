@@ -1,6 +1,7 @@
 import { FileDown } from "lucide-react";
 
 import { EntityForm } from "@/components/entity-form";
+import { ExportButton } from "@/components/export-button";
 import { Pagination } from "@/components/pagination";
 import { RecordList, type RecordField } from "@/components/record-list";
 import { RowActions } from "@/components/row-actions";
@@ -93,6 +94,7 @@ export default async function ExpensesPage({
             ? `${formatCurrency(total)} de dépenses enregistrées.`
             : "Charges, travaux, taxes et assurances par immeuble."
         }
+        action={<ExportButton dataset="depenses" />}
       />
 
       {editable && (

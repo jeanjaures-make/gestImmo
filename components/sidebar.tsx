@@ -12,6 +12,7 @@ import {
   LayoutDashboard,
   Receipt,
   ScrollText,
+  Settings,
   UserCog,
   Users,
   Wallet,
@@ -47,6 +48,7 @@ const NAV: NavItem[] = [
     roles: ["owner", "manager"],
   },
   { href: "/team", label: "Équipe", icon: UserCog, roles: ["owner"] },
+  { href: "/settings", label: "Réglages", icon: Settings },
 ];
 
 export function Sidebar({

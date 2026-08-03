@@ -2,6 +2,7 @@ import { BadgeCheck } from "lucide-react";
 
 import { DeclarationReview } from "@/components/declaration-review";
 import { EntityForm } from "@/components/entity-form";
+import { ExportButton } from "@/components/export-button";
 import { MarkPaid } from "@/components/mark-paid";
 import { Pagination } from "@/components/pagination";
 import { RecordList, type RecordField } from "@/components/record-list";
@@ -149,6 +150,7 @@ export default async function PaymentsPage({
             ? `${formatCurrency(outstanding)} restent à encaisser, toutes échéances confondues.`
             : "Historique des échéances de loyer."
         }
+        action={<ExportButton dataset="paiements" />}
       />
 
       {/* En tête d'écran : un règlement déclaré attend une décision, il ne

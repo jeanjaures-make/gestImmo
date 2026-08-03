@@ -93,13 +93,43 @@ Un seul fichier, rejouable : [`supabase/schema.sql`](supabase/schema.sql).
 [`supabase/reset.sql`](supabase/reset.sql) est **destructif** et n'a de sens
 que pour repartir d'une base vide.
 
-À relancer notamment pour bénéficier de :
+### À rejouer sans attendre — correctif de sécurité
+
+Le déclencheur `profiles_guard_columns` ferme une **escalade de
+privilèges**. Le RLS raisonne par lignes et jamais par colonnes : la policy
+`profiles_update`, qui autorise chacun à corriger son propre nom,
+autorisait du même geste `role` et `tenant_id`. N'importe quel compte —
+locataire compris — pouvait exécuter contre l'API publique :
+
+```sql
+UPDATE profiles SET role = 'owner', tenant_id = NULL WHERE id = auth.uid();
+```
+
+et devenir propriétaire de l'organisation qui l'héberge. Aucun écran ne
+proposait ce geste, mais PostgREST est joignable directement : le
+formulaire n'est pas la frontière.
+
+Vérifiable en une commande, avant et après :
+
+```
+npm run verify:rls
+```
+
+Trois assertions de la section « ESCALADE DE PRIVILÈGES » échouent sur un
+schéma non corrigé. La même exécution vérifie qu'un propriétaire promeut
+toujours ses collaborateurs — corriger la faille sans casser la gestion
+d'équipe.
+
+### Autres raisons de relancer le script
+
 - la garde du trigger d'audit, sans laquelle **une organisation ne peut pas
   être supprimée** (clôture de compte, effacement à la demande) ;
 - `is_staff()` sur `rent_payments_write`, qui empêche un compte locataire
   promu « comptable » d'écrire en caisse ;
 - les fonctions qualifiées `public.` dans les policies Storage, sans
-  lesquelles un locataire ne peut pas télécharger sa quittance.
+  lesquelles un locataire ne peut pas télécharger sa quittance ;
+- le `WITH CHECK` de `tenants_self_update`, qui épingle l'organisation : un
+  locataire ne déplace pas sa fiche vers un portefeuille voisin.
 
 ---
 
@@ -132,6 +162,10 @@ Puis, sur le déploiement lui-même :
 - [ ] Il déclare un règlement ; le gestionnaire le voit en tête de
       `/payments` et l'encaisse.
 - [ ] Clôturer le bail : le logement repasse en « Libre ».
+- [ ] Sur `/payments`, « Exporter en CSV » : le fichier s'ouvre dans Excel
+      avec des accents corrects, des colonnes séparées, et des montants sur
+      lesquels une somme fonctionne.
+- [ ] Sur `/settings`, renommer l'organisation et changer son mot de passe.
 - [ ] Ouvrir le produit **sur un téléphone**, pas en simulation.
 
 ---

@@ -231,4 +231,52 @@ test("de l'inscription à la remise en location du logement", async ({
 
   await page.goto("/apartments");
   await expect(shown(page, "Libre")).toBeVisible();
+
+  // ------------------------------------------------- 14. Export comptable
+  // On lit la réponse brute : c'est le fichier remis au comptable qui
+  // compte, pas l'apparence du bouton.
+  const csv = await page.request.get("/export/paiements");
+  expect(csv.status()).toBe(200);
+  expect(csv.headers()["content-type"]).toContain("text/csv");
+  expect(csv.headers()["content-disposition"]).toContain(".csv");
+
+  const body = await csv.text();
+  // Le BOM d'abord : sans lui, Excel casse tous les accents du fichier.
+  expect(body.startsWith("﻿")).toBe(true);
+
+  const lines = body.slice(1).split("\r\n");
+  expect(lines[0]).toBe(
+    "Mois;Locataire;Immeuble;Logement;Dû;Encaissé;Statut;Réglé le;Moyen;Note",
+  );
+  // Autant de lignes que d'échéances, plus l'en-tête : l'en-tête de réponse
+  // permet de le vérifier sans compter à la main.
+  expect(Number(csv.headers()["x-row-count"])).toBe(lines.length - 1);
+  expect(lines.length - 1).toBeGreaterThan(0);
+  expect(body).toContain("Karim Benali");
+
+  // ----------------------------------------------------- 15. Réglages
+  await page.goto("/settings");
+  await expect(shown(page, "Connexions récentes")).toBeVisible();
+  // La connexion du gérant vient d'être journalisée par `record_login_event`.
+  await expect(shown(page, "Réussie").first()).toBeVisible();
+
+  // Renommer son agence : impossible jusqu'ici, le nom était figé à
+  // l'inscription. Deux formulaires portent « Enregistrer » — profil puis
+  // organisation ; c'est le second.
+  const renamed = `${orgName} SARL`;
+  await page.getByLabel("Nom de l'organisation").fill(renamed);
+  await page.getByRole("button", { name: "Enregistrer" }).last().click();
+
+  // Le nom se vérifie en base : le bandeau latéral qui l'affiche est masqué
+  // sur mobile, l'assertion ne tiendrait que sur un seul des deux projets.
+  await expect
+    .poll(async () => {
+      const { data } = await admin()
+        .from("organizations")
+        .select("name")
+        .eq("id", org!.id)
+        .single();
+      return data?.name;
+    })
+    .toBe(renamed);
 });

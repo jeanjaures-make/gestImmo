@@ -150,6 +150,34 @@ au moindre incident, un encaissement sans trace ou l'inverse.
 Le jour où un prestataire sera raccordé, il s'insérera au même endroit : une
 déclaration créée et validée par le webhook plutôt que par un humain.
 
+## Réglages et exports
+
+`/settings` réunit ce qui relève du compte plutôt que du parc : nom affiché,
+changement de mot de passe **sans quitter l'application**, connexions
+récentes, fermeture de toutes les sessions, et — pour un propriétaire — le
+nom et le logo de l'organisation.
+
+Le changement de mot de passe redemande l'ancien, ce que Supabase n'exige
+pas. Sans cette ressaisie, une session laissée ouverte sur un poste partagé
+suffit à changer le mot de passe et à verrouiller le titulaire hors de son
+propre compte. C'est aussi la seule voie qui ne dépende d'aucun envoi
+d'e-mail.
+
+Les listes Paiements, Dépenses, Locataires et Baux s'exportent en CSV. Trois
+détails décident si le fichier s'ouvre correctement ou en bouillie, et
+aucun n'est deviné par l'utilisateur qui double-clique : séparateur
+point-virgule, décimales à la virgule, et BOM UTF-8 — sans quoi Excel
+francophone empile tout dans la première colonne et massacre les accents.
+Les cellules commençant par `=`, `+`, `-` ou `@` sont neutralisées : un nom
+de locataire est une donnée saisie par un tiers, et un tableur exécute ce
+genre de cellule. Voir [`lib/csv.ts`](lib/csv.ts) et ses tests.
+
+L'export pagine jusqu'à épuisement plutôt que de faire une requête unique :
+PostgREST plafonne les réponses, et un export comptable tronqué en silence
+est le pire des défauts — rien ne distingue « il n'y a que mille paiements »
+de « on vous en a caché quatre mille ». Le nombre de lignes voyage dans
+l'en-tête `X-Row-Count`.
+
 ## Ouvrir un accès sans envoyer d'e-mail
 
 Ouvrir l'espace d'un locataire, ou inviter un collaborateur, ne déclenche
@@ -206,7 +234,18 @@ régénère un lien.
   périmètres sont disjoints par construction — un locataire ne voit ni les
   autres locataires, ni les dépenses, ni le journal d'audit. Son rôle
   (`viewer`) n'y est pour rien : ce n'est pas lui qui le protège.
-- Journal des connexions, réussies comme échouées (`login_events`).
+- **Colonnes sensibles figées par déclencheur.** Le RLS raisonne par lignes,
+  jamais par colonnes : la policy qui laisse chacun corriger son propre nom
+  laissait du même geste modifier son `role` et son `tenant_id`. Un
+  locataire pouvait donc se promouvoir propriétaire en une requête contre
+  l'API publique — le formulaire n'est pas la frontière. Le déclencheur
+  `profiles_guard_columns` refuse désormais ces écritures, sauf pour un
+  propriétaire modifiant le rôle de quelqu'un d'autre. Éprouvé dans les deux
+  sens par `npm run verify:rls` : la faille doit être détectée, et le geste
+  légitime doit continuer de passer.
+- Journal des connexions, réussies comme échouées (`login_events`),
+  consultable par son titulaire sur `/settings`, avec fermeture de toutes
+  les sessions en un geste.
 - Messages d'authentification volontairement indistincts pour ne pas
   révéler quels comptes existent.
 
