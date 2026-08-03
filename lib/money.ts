@@ -44,3 +44,54 @@ export function formatAmount(value: number | string | null | undefined) {
     Number(value ?? 0),
   );
 }
+
+/**
+ * Montant abrégé, pour les tuiles d'indicateurs.
+ *
+ * « 12 400 000 F CFA » fait seize caractères : dans une tuile de moitié
+ * d'écran sur téléphone, le texte débordait de son cadre. Les montants en
+ * francs CFA comptent trois à quatre chiffres de plus que les mêmes
+ * sommes en euros — les gabarits calibrés pour l'euro ne tiennent plus.
+ *
+ * L'abrégé arrondit : « 11,4 M » pour 11 350 000. C'est acceptable pour un
+ * indicateur qu'on lit d'un coup d'œil, à condition que la valeur exacte
+ * reste accessible — les appelants la passent en `title`.
+ *
+ * À n'utiliser QUE là où la place manque. Les listes, les quittances et
+ * tout ce qui fait foi gardent `formatCurrency`.
+ */
+const compactFormatter = new Intl.NumberFormat("fr-FR", {
+  style: "currency",
+  currency: CURRENCY,
+  notation: "compact",
+  maximumFractionDigits: 1,
+});
+
+export function formatCompactCurrency(
+  value: number | string | null | undefined,
+) {
+  const amount = Number(value ?? 0);
+
+  // En deçà de dix mille, l'abrégé n'économise rien et dégrade la lecture :
+  // « 9,5 k F CFA » est plus long que « 9 500 F CFA ».
+  if (Math.abs(amount) < 10_000) return formatter.format(amount);
+
+  return compactFormatter.format(amount);
+}
+
+/**
+ * Nombre abrégé, sans devise : « 12,4 M ».
+ *
+ * Pour les tuiles vraiment étroites — celles des maquettes de la vitrine,
+ * larges d'une centaine de pixels — où même « 12,4 M F CFA » est coupé.
+ * La devise doit alors être portée par la légende de la tuile, une fois,
+ * plutôt que répétée sur chaque valeur.
+ */
+const compactAmountFormatter = new Intl.NumberFormat("fr-FR", {
+  notation: "compact",
+  maximumFractionDigits: 1,
+});
+
+export function formatCompactAmount(value: number | string | null | undefined) {
+  return compactAmountFormatter.format(Number(value ?? 0));
+}

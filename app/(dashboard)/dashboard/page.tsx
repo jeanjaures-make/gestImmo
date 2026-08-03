@@ -37,6 +37,7 @@ import {
 } from "@/components/ui/kit";
 import { hasRole, requireSession } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { formatCompactCurrency } from "@/lib/money";
 import { formatCurrency, formatDate } from "@/lib/types";
 
 export const metadata = { title: "Vue d'ensemble — ImmoOps" };
@@ -83,12 +84,15 @@ const ACTION_VERBS: Record<string, string> = {
 function Stat({
   label,
   value,
+  exact,
   hint,
   icon: Icon,
   emphasis,
 }: {
   label: string;
   value: string;
+  /** Montant exact, quand `value` est abrégé. Révélé au survol. */
+  exact?: string;
   hint?: string;
   icon: LucideIcon;
   emphasis?: "danger" | "success";
@@ -104,8 +108,12 @@ function Stat({
           </span>
           <Icon className="size-3.5 shrink-0 text-muted-foreground" />
         </div>
+        {/* Les montants en francs CFA comptent trois à quatre chiffres de
+            plus que les mêmes sommes en euros : sans abrègement ni
+            troncature, ils débordaient de la tuile sur téléphone. */}
         <div
-          className={`font-heading mt-1.5 text-xl font-semibold sm:text-2xl ${
+          title={exact}
+          className={`font-heading mt-1.5 truncate text-xl font-semibold tabular-nums sm:text-2xl ${
             emphasis === "danger"
               ? "text-destructive"
               : emphasis === "success"
@@ -384,19 +392,22 @@ export default async function DashboardPage({
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat
           label="Revenus mensuels"
-          value={formatCurrency(monthlyRevenue)}
+          value={formatCompactCurrency(monthlyRevenue)}
+          exact={formatCurrency(monthlyRevenue)}
           hint="Baux actifs"
           icon={Wallet}
         />
         <Stat
           label="Encaissé ce mois"
-          value={formatCurrency(collectedThisMonth)}
+          value={formatCompactCurrency(collectedThisMonth)}
+          exact={formatCurrency(collectedThisMonth)}
           hint={`sur ${formatCurrency(dueThisMonth)}`}
           icon={TrendingUp}
         />
         <Stat
           label="Impayés"
-          value={formatCurrency(unpaid)}
+          value={formatCompactCurrency(unpaid)}
+          exact={formatCurrency(unpaid)}
           hint="Échéances échues"
           icon={AlertTriangle}
           emphasis={unpaid > 0 ? "danger" : undefined}
@@ -470,14 +481,16 @@ export default async function DashboardPage({
       <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat
           label="Cashflow du mois"
-          value={formatCurrency(netThisMonth)}
+          value={formatCompactCurrency(netThisMonth)}
+          exact={formatCurrency(netThisMonth)}
           hint="Encaissé − dépenses"
           icon={PiggyBank}
           emphasis={netThisMonth < 0 ? "danger" : "success"}
         />
         <Stat
           label="Patrimoine"
-          value={portfolioValue > 0 ? formatCurrency(portfolioValue) : "—"}
+          value={portfolioValue > 0 ? formatCompactCurrency(portfolioValue) : "—"}
+          exact={portfolioValue > 0 ? formatCurrency(portfolioValue) : undefined}
           hint={`${buildings.length} immeuble(s)`}
           icon={Building2}
         />
@@ -495,7 +508,8 @@ export default async function DashboardPage({
         />
         <Stat
           label="Dépenses du mois"
-          value={formatCurrency(expensesThisMonth)}
+          value={formatCompactCurrency(expensesThisMonth)}
+          exact={formatCurrency(expensesThisMonth)}
           icon={Receipt}
         />
         <Stat

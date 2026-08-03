@@ -64,7 +64,7 @@ export default async function PortalPaymentsPage({
         <CardContent className="p-5">
           <p className="text-sm text-muted-foreground">Reste à régler</p>
           <p
-            className={`font-heading mt-1 text-3xl font-semibold ${
+            className={`font-heading mt-1 text-2xl font-semibold tabular-nums sm:text-3xl ${
               outstanding > 0 ? "text-destructive" : "text-success"
             }`}
           >

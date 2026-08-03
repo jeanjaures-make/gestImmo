@@ -84,7 +84,7 @@ export default async function PortalHomePage() {
           <p className="text-sm opacity-80">
             {next ? `Loyer de ${formatMonth(next.month)}` : "Loyer mensuel"}
           </p>
-          <p className="font-heading mt-1 text-4xl font-semibold">
+          <p className="font-heading mt-1 text-3xl font-semibold tabular-nums sm:text-4xl">
             {formatCurrency(next ? next.amount : monthlyTotal)}
           </p>
           {next && nextStatus && (
