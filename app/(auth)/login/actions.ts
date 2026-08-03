@@ -4,14 +4,19 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
-import { createClient } from "@/lib/supabase/server";
+import { signupMode } from "@/lib/auth-config";
+import { reportError } from "@/lib/observability";
 import { callerKey, rateLimit } from "@/lib/rate-limit";
+import { safeNext } from "@/lib/redirect";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import {
   credentialsSchema,
   emailSchema,
   firstIssue,
   formDataToObject,
   passwordUpdateSchema,
+  signupSchema,
 } from "@/lib/validation";
 
 export type AuthState = { error?: string; message?: string };
@@ -59,14 +64,33 @@ export async function signIn(
 
   await logAttempt(parsed.data.email, !error);
 
-  // Message volontairement identique pour un e-mail inconnu et un mot de
-  // passe faux : ne pas révéler quels comptes existent.
-  if (error) return { error: "Identifiants incorrects." };
+  if (error) {
+    // Message identique pour une adresse inconnue et un mot de passe faux :
+    // les distinguer révélerait quels comptes existent.
+    //
+    // Seule exception : l'adresse en attente de confirmation. Sans ce
+    // message, l'utilisateur chercherait indéfiniment une faute de frappe
+    // dans un mot de passe pourtant correct.
+    if (error.code === "email_not_confirmed") {
+      return {
+        error:
+          "Votre adresse n'est pas encore confirmée. Ouvrez le lien reçu par e-mail.",
+      };
+    }
+    return { error: "Adresse e-mail ou mot de passe incorrect." };
+  }
 
   revalidatePath("/", "layout");
-  redirect("/dashboard");
+  redirect(safeNext(String(formData.get("next") ?? "")));
 }
 
+/**
+ * Création de compte.
+ *
+ * Deux chemins, choisis par `signupMode()` — voir `lib/auth-config.ts`.
+ * L'écran d'inscription n'a pas à savoir lequel est actif, et passer de
+ * l'un à l'autre ne touche ni à l'interface ni au reste du parcours.
+ */
 export async function signUp(
   _prev: AuthState,
   formData: FormData,
@@ -77,23 +101,118 @@ export async function signUp(
     windowMs: 60 * 60_000,
   });
   if (!limit.ok) {
-    return { error: "Trop de créations de compte. Réessayez plus tard." };
+    return {
+      error:
+        "Trop de créations de compte depuis cet appareil. Réessayez plus tard.",
+    };
   }
 
-  const parsed = credentialsSchema.safeParse(formDataToObject(formData));
+  const parsed = signupSchema.safeParse(formDataToObject(formData));
   if (!parsed.success) return { error: firstIssue(parsed.error) };
 
+  const { email, password } = parsed.data;
+
+  return signupMode() === "email-confirmation"
+    ? signUpWithConfirmation(email, password)
+    : signUpInstant(email, password);
+}
+
+/**
+ * Compte créé et confirmé côté serveur, session ouverte dans la foulée.
+ *
+ * `createUser` n'envoie aucun message : l'inscription ne dépend donc
+ * d'aucun serveur d'envoi. La session est ensuite établie par une
+ * connexion normale, ce qui pose exactement les mêmes cookies que si
+ * l'utilisateur s'était connecté lui-même — aucun chemin
+ * d'authentification parallèle n'est introduit.
+ */
+async function signUpInstant(
+  email: string,
+  password: string,
+): Promise<AuthState> {
+  const admin = createAdminClient();
+  if (!admin) {
+    return {
+      error:
+        "L'inscription est momentanément indisponible. Écrivez-nous à contact@immoops.fr.",
+    };
+  }
+
+  const { error } = await admin.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+  });
+
+  if (error) {
+    if (/already been registered|already exists/i.test(error.message)) {
+      // Compromis assumé : on révèle que l'adresse est prise. À
+      // l'inscription l'information fuit de toute façon — deux comptes ne
+      // peuvent pas partager une adresse — autant l'annoncer clairement
+      // plutôt que de laisser l'utilisateur buter sans comprendre. La
+      // connexion, elle, reste indistincte.
+      return {
+        error: "Un compte existe déjà pour cette adresse. Connectez-vous.",
+      };
+    }
+    reportError(error, { scope: "signup-instant" });
+    return {
+      error: "La création du compte a échoué. Réessayez dans un instant.",
+    };
+  }
+
   const supabase = await createClient();
-  const { data, error } = await supabase.auth.signUp(parsed.data);
+  const { error: signInError } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  });
 
-  if (error) return { error: error.message };
-
-  // Si la confirmation par e-mail est activée dans Supabase, aucune session
-  // n'est ouverte tant que le lien n'est pas cliqué.
-  if (!data.session) {
+  if (signInError) {
+    // Le compte existe, seule la session a échoué. On ne le supprime pas :
+    // l'utilisateur peut se connecter, et on le lui dit.
+    reportError(signInError, { scope: "signup-instant-signin" });
     return {
       message:
-        "Compte créé. Vérifiez votre boîte mail pour confirmer votre adresse.",
+        "Votre compte est créé. Connectez-vous pour accéder à votre espace.",
+    };
+  }
+
+  await logAttempt(email, true);
+  revalidatePath("/", "layout");
+  redirect("/onboarding");
+}
+
+/** Chemin classique : un lien de confirmation, une session après le clic. */
+async function signUpWithConfirmation(
+  email: string,
+  password: string,
+): Promise<AuthState> {
+  const h = await headers();
+  const origin = h.get("origin") ?? `https://${h.get("host")}`;
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: { emailRedirectTo: `${origin}/auth/callback?next=/onboarding` },
+  });
+
+  if (error) {
+    if (/already registered|already exists/i.test(error.message)) {
+      return {
+        error: "Un compte existe déjà pour cette adresse. Connectez-vous.",
+      };
+    }
+    reportError(error, { scope: "signup-confirmation" });
+    return {
+      error:
+        "L'envoi du message de confirmation a échoué. Réessayez dans un instant.",
+    };
+  }
+
+  if (!data.session) {
+    return {
+      message: `Compte créé. Un lien de confirmation vient d'être envoyé à ${email}.`,
     };
   }
 
@@ -147,7 +266,9 @@ export async function updatePassword(
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return { error: "Lien expiré. Redemandez un e-mail de réinitialisation." };
+    return {
+      error: "Ce lien a expiré. Demandez un nouvel e-mail de réinitialisation.",
+    };
   }
 
   const { error } = await supabase.auth.updateUser({

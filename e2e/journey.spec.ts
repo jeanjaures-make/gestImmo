@@ -69,21 +69,16 @@ async function openCreationPanel(page: Page, trigger: string) {
 test("de l'inscription à la remise en location du logement", async ({
   page,
 }) => {
-  // ---------------------------------- 1. Compte propriétaire, puis connexion
-  // Créé sans e-mail (voir l'en-tête) ; la connexion, elle, passe bien par
-  // le formulaire.
-  await admin().auth.admin.createUser({
-    email: ownerEmail,
-    password: TEST_PASSWORD,
-    email_confirm: true,
-  });
-
-  await page.goto("/login");
+  // ------------------------------------------------------- 1. Inscription
+  // Par le formulaire public, exactement comme un client. Aucun e-mail
+  // n'intervient : le mode « instant » crée le compte confirmé côté
+  // serveur et ouvre la session dans la foulée.
+  await page.goto("/signup");
   await page.getByLabel("Adresse e-mail").fill(ownerEmail);
-  await page.getByLabel("Mot de passe").fill(TEST_PASSWORD);
-  await page.getByRole("button", { name: "Se connecter" }).click();
+  await page.getByLabel("Mot de passe", { exact: true }).fill(TEST_PASSWORD);
+  await page.getByRole("button", { name: "Créer mon compte" }).click();
 
-  // Un compte sans organisation doit atterrir sur l'accueil de création.
+  // Un compte sans organisation atterrit sur l'écran de création.
   await page.waitForURL("**/onboarding");
 
   // ----------------------------------------------------- 2. Organisation

@@ -1,12 +1,25 @@
 import Link from "next/link";
 
-import { AuthForm } from "@/components/auth-form";
-import { Card, CardContent, Field, Input } from "@/components/ui/kit";
+import { AuthForm, EmailField, PasswordField } from "@/components/auth-form";
+import { Card, CardContent } from "@/components/ui/kit";
+import { safeNext } from "@/lib/redirect";
 import { signIn } from "./actions";
 
 export const metadata = { title: "Connexion — ImmoOps" };
 
-export default function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string }>;
+}) {
+  const { next } = await searchParams;
+
+  // Le proxy pose `next` quand il intercepte une page protégée. On le
+  // renvoie au formulaire après l'avoir borné à un chemin interne : sans
+  // cette garde, `?next=https://site-pirate.fr` produirait une redirection
+  // ouverte depuis une adresse de confiance.
+  const destination = safeNext(next);
+
   return (
     <Card>
       <CardContent className="p-6">
@@ -16,41 +29,29 @@ export default function LoginPage() {
         </p>
 
         <AuthForm action={signIn} submitLabel="Se connecter">
-          <Field label="Adresse e-mail">
-            <Input
-              name="email"
-              type="email"
-              autoComplete="email"
-              placeholder="vous@exemple.com"
-              required
-            />
-          </Field>
-
-          <Field label="Mot de passe">
-            <Input
-              name="password"
-              type="password"
-              autoComplete="current-password"
-              placeholder="••••••••"
-              required
-            />
-          </Field>
+          <input type="hidden" name="next" value={destination} />
+          <EmailField autoFocus />
+          <PasswordField
+            hint={
+              <Link
+                href="/forgot-password"
+                className="text-sm text-muted-foreground underline-offset-4 hover:underline"
+              >
+                Oublié ?
+              </Link>
+            }
+          />
         </AuthForm>
 
-        <div className="mt-6 flex flex-col gap-2 text-center text-sm">
-          <Link
-            href="/forgot-password"
-            className="text-muted-foreground underline-offset-4 hover:underline"
-          >
-            Mot de passe oublié ?
-          </Link>
+        <p className="mt-6 text-center text-sm text-muted-foreground">
+          Pas encore de compte ?{" "}
           <Link
             href="/signup"
             className="text-primary underline-offset-4 hover:underline"
           >
             Créer une organisation
           </Link>
-        </div>
+        </p>
       </CardContent>
     </Card>
   );

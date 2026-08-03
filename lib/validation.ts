@@ -78,12 +78,46 @@ const optionalIsoDate = z.preprocess(
     .pipe(isoDate.nullable()),
 );
 
+/**
+ * Mot de passe.
+ *
+ * Douze caractères plutôt que huit : c'est la longueur, bien plus que la
+ * présence d'un caractère spécial, qui résiste à une attaque par force
+ * brute. On exige tout de même un mélange de casse et un chiffre, pour
+ * écarter les phrases entièrement en minuscules qui figurent telles quelles
+ * dans les dictionnaires de fuites.
+ *
+ * La borne haute vient de bcrypt, qui ignore au-delà de 72 octets : mieux
+ * vaut refuser que de tronquer sans le dire.
+ */
+export const passwordSchema = z
+  .string()
+  .min(12, { message: "Douze caractères au minimum." })
+  .max(72, { message: "Soixante-douze caractères au maximum." })
+  .refine((v) => /[a-z]/.test(v) && /[A-Z]/.test(v), {
+    message: "Mélangez majuscules et minuscules.",
+  })
+  .refine((v) => /[0-9]/.test(v), { message: "Ajoutez au moins un chiffre." });
+
+/** Règles affichées à la saisie, dans l'ordre où on les vérifie. */
+export const PASSWORD_RULES = [
+  { label: "Douze caractères", test: (v: string) => v.length >= 12 },
+  {
+    label: "Majuscule et minuscule",
+    test: (v: string) => /[a-z]/.test(v) && /[A-Z]/.test(v),
+  },
+  { label: "Au moins un chiffre", test: (v: string) => /[0-9]/.test(v) },
+] as const;
+
+/** À la connexion, on ne rejoue pas les règles : le compte existe déjà. */
 export const credentialsSchema = z.object({
   email: z.email({ message: "Adresse e-mail invalide." }),
-  password: z
-    .string()
-    .min(8, { message: "Le mot de passe doit faire au moins 8 caractères." })
-    .max(72, { message: "Le mot de passe est trop long." }),
+  password: z.string().min(1, { message: "Saisissez votre mot de passe." }),
+});
+
+export const signupSchema = z.object({
+  email: z.email({ message: "Adresse e-mail invalide." }),
+  password: passwordSchema,
 });
 
 export const emailSchema = z.object({
@@ -92,10 +126,7 @@ export const emailSchema = z.object({
 
 export const passwordUpdateSchema = z
   .object({
-    password: z
-      .string()
-      .min(8, { message: "Le mot de passe doit faire au moins 8 caractères." })
-      .max(72),
+    password: passwordSchema,
     confirm: z.string(),
   })
   .refine((v) => v.password === v.confirm, {

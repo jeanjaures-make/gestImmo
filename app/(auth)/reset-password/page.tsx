@@ -1,5 +1,5 @@
-import { AuthForm } from "@/components/auth-form";
-import { Card, CardContent, Field, Input } from "@/components/ui/kit";
+import { AuthForm, PasswordField } from "@/components/auth-form";
+import { Card, CardContent } from "@/components/ui/kit";
 import { updatePassword } from "../login/actions";
 
 export const metadata = { title: "Nouveau mot de passe — ImmoOps" };
@@ -17,23 +17,16 @@ export default function ResetPasswordPage() {
         </p>
 
         <AuthForm action={updatePassword} submitLabel="Enregistrer">
-          <Field label="Nouveau mot de passe" hint="8 caractères minimum.">
-            <Input
-              name="password"
-              type="password"
-              autoComplete="new-password"
-              required
-            />
-          </Field>
-
-          <Field label="Confirmation">
-            <Input
-              name="confirm"
-              type="password"
-              autoComplete="new-password"
-              required
-            />
-          </Field>
+          <PasswordField
+            label="Nouveau mot de passe"
+            autoComplete="new-password"
+            showRules
+          />
+          <PasswordField
+            name="confirm"
+            label="Confirmation"
+            autoComplete="new-password"
+          />
         </AuthForm>
       </CardContent>
     </Card>

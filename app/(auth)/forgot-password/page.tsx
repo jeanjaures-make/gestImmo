@@ -1,7 +1,7 @@
 import Link from "next/link";
 
-import { AuthForm } from "@/components/auth-form";
-import { Card, CardContent, Field, Input } from "@/components/ui/kit";
+import { AuthForm, EmailField } from "@/components/auth-form";
+import { Card, CardContent } from "@/components/ui/kit";
 import { requestPasswordReset } from "../login/actions";
 
 export const metadata = { title: "Mot de passe oublié — ImmoOps" };
@@ -18,15 +18,7 @@ export default function ForgotPasswordPage() {
         </p>
 
         <AuthForm action={requestPasswordReset} submitLabel="Envoyer le lien">
-          <Field label="Adresse e-mail">
-            <Input
-              name="email"
-              type="email"
-              autoComplete="email"
-              placeholder="vous@exemple.com"
-              required
-            />
-          </Field>
+          <EmailField autoFocus />
         </AuthForm>
 
         <p className="mt-6 text-center text-sm">
