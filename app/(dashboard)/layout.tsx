@@ -33,14 +33,16 @@ export default async function DashboardLayout({
 
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
-      <Sidebar
-        organizationName={organization.name}
-        logoUrl={organization.logo_url}
-        role={profile.role}
-      />
+      <div className="print:hidden">
+        <Sidebar
+          organizationName={organization.name}
+          logoUrl={organization.logo_url}
+          role={profile.role}
+        />
+      </div>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center gap-3 border-b px-6 py-3">
+        <header className="flex items-center gap-3 border-b px-6 py-3 print:hidden">
           <GlobalSearch />
           <div className="flex-1" />
           {/* Le rôle s'efface sur mobile au profit des réglages : c'est une
@@ -65,10 +67,12 @@ export default async function DashboardLayout({
         </header>
 
         {/* pb-24 : dégage la hauteur de la barre basse mobile. */}
-        <main className="flex-1 p-4 pb-24 md:p-8 md:pb-8">{children}</main>
+        <main className="flex-1 p-4 pb-24 md:p-8 md:pb-8 print:p-0 print:pb-0">{children}</main>
       </div>
 
-      <StaffNav />
+      <div className="print:hidden">
+        <StaffNav />
+      </div>
     </div>
   );
 }
