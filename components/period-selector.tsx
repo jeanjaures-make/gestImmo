@@ -29,7 +29,7 @@ export function PeriodSelector({ current }: { current: Period }) {
           aria-pressed={months === current}
           onClick={() => select(months)}
           className={cn(
-            "cursor-pointer rounded-md px-3 py-1 text-xs font-medium transition-colors",
+            "min-h-9 cursor-pointer rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
             months === current
               ? "bg-primary text-primary-foreground"
               : "text-muted-foreground hover:text-foreground",

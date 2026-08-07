@@ -75,7 +75,74 @@ export function DeliveryLines({ lines }: { lines?: DeliveryNoteLine[] }) {
         Articles sortis
       </span>
 
-      <div className="overflow-x-auto">
+      {/* Mobile : chaque ligne est une carte empilée. Le tableau fixe à
+          640 px forçait un défilement latéral sur téléphone — illisible au
+          comptoir. */}
+      <ul className="flex flex-col gap-2 md:hidden">
+        {rows.map((row, index) => (
+          <li
+            key={row.key}
+            className="rounded-lg border p-3"
+          >
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-xs font-medium text-muted-foreground">
+                Ligne {index + 1}
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => removeRow(row.key)}
+                disabled={rows.length === 1}
+                aria-label={`Retirer la ligne ${index + 1}`}
+                className="size-8"
+              >
+                <Trash2 className="size-4" />
+              </Button>
+            </div>
+            <div className="flex flex-col gap-2">
+              <Input
+                name="designation"
+                value={row.designation}
+                onChange={(e) =>
+                  update(row.key, "designation", e.target.value)
+                }
+                aria-label={`Désignation, ligne ${index + 1}`}
+                placeholder="Désignation"
+              />
+              <Input
+                name="quantity"
+                value={row.quantity}
+                onChange={(e) => update(row.key, "quantity", e.target.value)}
+                aria-label={`Quantité, ligne ${index + 1}`}
+                placeholder="Quantité"
+                inputMode="numeric"
+              />
+              <Input
+                name="destination"
+                value={row.destination}
+                onChange={(e) =>
+                  update(row.key, "destination", e.target.value)
+                }
+                aria-label={`Destination, ligne ${index + 1}`}
+                placeholder="Destination"
+              />
+              <Input
+                name="observations"
+                value={row.observations}
+                onChange={(e) =>
+                  update(row.key, "observations", e.target.value)
+                }
+                aria-label={`Observations, ligne ${index + 1}`}
+                placeholder="Observations"
+              />
+            </div>
+          </li>
+        ))}
+      </ul>
+
+      {/* Desktop : le tableau dense reste plus lisible. */}
+      <div className="hidden overflow-x-auto md:block">
         <table className="w-full min-w-[640px] border-separate border-spacing-y-1.5 text-sm">
           <thead>
             <tr className="text-left text-xs text-muted-foreground">
@@ -149,7 +216,13 @@ export function DeliveryLines({ lines }: { lines?: DeliveryNoteLine[] }) {
       </div>
 
       <div>
-        <Button type="button" variant="outline" size="sm" onClick={addRow}>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={addRow}
+          className="w-full md:w-auto"
+        >
           <Plus className="size-4" />
           Ajouter une ligne
         </Button>

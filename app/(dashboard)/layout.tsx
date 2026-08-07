@@ -42,7 +42,7 @@ export default async function DashboardLayout({
       </div>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center gap-3 border-b px-6 py-3 print:hidden">
+        <header className="flex items-center gap-1.5 border-b px-4 py-2.5 md:gap-3 md:px-6 md:py-3 print:hidden">
           <GlobalSearch />
           <div className="flex-1" />
           {/* Le rôle s'efface sur mobile au profit des réglages : c'est une

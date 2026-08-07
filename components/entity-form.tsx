@@ -62,6 +62,7 @@ export function EntityForm({
           setLink(undefined);
           setOpen(true);
         }}
+        className="w-full md:w-auto"
       >
         <Plus className="size-4" />
         {triggerLabel}
@@ -71,7 +72,7 @@ export function EntityForm({
 
   return (
     <Card className="w-full">
-      <CardContent className="p-5">
+      <CardContent className="p-4 md:p-5">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="font-heading font-medium">{title}</h2>
           <button
