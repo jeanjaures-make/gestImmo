@@ -7,7 +7,7 @@ import {
   FileText,
   Loader2,
   PackageOpen,
-  Receipt,
+  ReceiptText,
   Search,
   Wallet,
 } from "lucide-react";
@@ -32,8 +32,8 @@ type SearchHit = {
 
 // Les clés viennent de `global_search()` : elles sont au singulier, comme la
 // pièce qu'un résultat désigne.
-const ICONS: Record<string, typeof Receipt> = {
-  receipt: Receipt,
+const ICONS: Record<string, typeof ReceiptText> = {
+  receipt: ReceiptText,
   cash_voucher: Wallet,
   delivery_note: PackageOpen,
 };

@@ -7,7 +7,7 @@ import {
   ChevronRight,
   Landmark,
   PackageOpen,
-  Receipt,
+  ReceiptText,
   Scale,
   UserRound,
   Wallet,
@@ -325,7 +325,7 @@ export default async function DashboardPage({
     {
       href: "/receipts",
       label: "Reçus",
-      icon: Receipt,
+      icon: ReceiptText,
       count: receiptsThisMonth.length,
       next: nextNumber("receipt"),
     },
@@ -383,7 +383,7 @@ export default async function DashboardPage({
           value={formatCompactCurrency(receivedThisMonth)}
           exact={formatCurrency(receivedThisMonth)}
           hint={`${receiptsThisMonth.length} reçu(s) émis`}
-          icon={Receipt}
+          icon={ReceiptText}
         />
         <Stat
           label="Entrées de caisse"

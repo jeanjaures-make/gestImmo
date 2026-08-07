@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Menu, Receipt, X } from "lucide-react";
+import { Menu, ReceiptText, X } from "lucide-react";
 
 import { PrimaryLink, SecondaryLink } from "@/components/marketing/ui";
 import { SITE } from "@/lib/site";
@@ -59,7 +59,7 @@ export function MarketingHeader() {
           className="flex items-center gap-2.5 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--m-deep)]"
         >
           <span className="flex size-8 items-center justify-center rounded-lg bg-[var(--m-deep)] text-white dark:text-[#101419]">
-            <Receipt className="size-4" />
+            <ReceiptText className="size-4" />
           </span>
           <span className="font-heading text-base font-semibold tracking-tight">
             {SITE.name}

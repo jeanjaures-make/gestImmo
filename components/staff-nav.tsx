@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, PackageOpen, Receipt, Wallet } from "lucide-react";
+import { LayoutDashboard, PackageOpen, ReceiptText, Wallet } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
 const NAV = [
   { href: "/dashboard", label: "Accueil", icon: LayoutDashboard },
-  { href: "/receipts", label: "Reçus", icon: Receipt },
+  { href: "/receipts", label: "Reçus", icon: ReceiptText },
   { href: "/cash-vouchers", label: "Caisse", icon: Wallet },
   { href: "/delivery-notes", label: "Sorties", icon: PackageOpen },
 ];

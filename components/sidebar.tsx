@@ -7,7 +7,7 @@ import {
   Building2,
   LayoutDashboard,
   PackageOpen,
-  Receipt,
+  ReceiptText,
   ScrollText,
   Settings,
   UserCog,
@@ -27,7 +27,7 @@ type NavItem = {
 
 const NAV: NavItem[] = [
   { href: "/dashboard", label: "Vue d'ensemble", icon: LayoutDashboard },
-  { href: "/receipts", label: "Reçus", icon: Receipt },
+  { href: "/receipts", label: "Reçus", icon: ReceiptText },
   { href: "/cash-vouchers", label: "Bons de caisse", icon: Wallet },
   { href: "/delivery-notes", label: "Bons de sortie", icon: PackageOpen },
   {

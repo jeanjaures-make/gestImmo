@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Mail, Receipt } from "lucide-react";
+import { Mail, ReceiptText } from "lucide-react";
 
 import { MarketingHeader } from "@/components/marketing/header";
 import { Container } from "@/components/marketing/ui";
@@ -63,7 +63,7 @@ export default function MarketingLayout({
             <div>
               <Link href="/" className="flex items-center gap-2.5">
                 <span className="flex size-8 items-center justify-center rounded-lg bg-[var(--m-deep)] text-white dark:text-[#101419]">
-                  <Receipt className="size-4" />
+                  <ReceiptText className="size-4" />
                 </span>
                 <span className="font-heading text-base font-semibold">
                   {SITE.name}

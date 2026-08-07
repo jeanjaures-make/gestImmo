@@ -2,7 +2,7 @@ import {
   Banknote,
   Home,
   PackageMinus,
-  Receipt,
+  ReceiptText,
   ScrollText,
   Users,
 } from "lucide-react";
@@ -92,13 +92,13 @@ export function DashboardMockup({ className }: { className?: string }) {
         <nav className="hidden w-40 shrink-0 flex-col gap-0.5 border-r border-[var(--m-line)] bg-[var(--m-subtle)] p-3 sm:flex">
           <div className="mb-3 flex items-center gap-2 px-1">
             <span className="flex size-6 items-center justify-center rounded-md bg-[var(--m-deep)] text-white">
-              <Receipt className="size-3" />
+              <ReceiptText className="size-3" />
             </span>
             <span className="text-[11px] font-semibold">Ets Konan & Fils</span>
           </div>
           {[
             { icon: Home, label: "Vue d'ensemble", active: true },
-            { icon: Receipt, label: "Reçus" },
+            { icon: ReceiptText, label: "Reçus" },
             { icon: Banknote, label: "Bons de caisse" },
             { icon: PackageMinus, label: "Bons de sortie" },
             { icon: ScrollText, label: "Journal d'audit" },

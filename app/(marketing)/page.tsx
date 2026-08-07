@@ -10,7 +10,7 @@ import {
   KeyRound,
   PackageMinus,
   Printer,
-  Receipt,
+  ReceiptText,
   ScrollText,
   Search,
   ShieldCheck,
@@ -45,7 +45,7 @@ export const metadata: Metadata = {
 
 const FEATURES = [
   {
-    icon: Receipt,
+    icon: ReceiptText,
     title: "Reçus à votre en-tête",
     body: "« Reçu de M./Mme », cadre bon pour francs, montant en toutes lettres, articles, avance et reste. Le reçu est établi au nom de qui l'émet.",
   },
