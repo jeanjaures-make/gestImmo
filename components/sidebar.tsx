@@ -4,19 +4,14 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
-  Bell,
   Building2,
-  DoorOpen,
-  FileText,
-  FolderClosed,
   LayoutDashboard,
+  PackageOpen,
   Receipt,
   ScrollText,
   Settings,
   UserCog,
-  Users,
   Wallet,
-  Wrench,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -32,15 +27,9 @@ type NavItem = {
 
 const NAV: NavItem[] = [
   { href: "/dashboard", label: "Vue d'ensemble", icon: LayoutDashboard },
-  { href: "/buildings", label: "Immeubles", icon: Building2 },
-  { href: "/apartments", label: "Logements", icon: DoorOpen },
-  { href: "/tenants", label: "Locataires", icon: Users },
-  { href: "/leases", label: "Baux", icon: FileText },
-  { href: "/payments", label: "Paiements", icon: Wallet },
-  { href: "/expenses", label: "Dépenses", icon: Receipt },
-  { href: "/maintenance", label: "Interventions", icon: Wrench },
-  { href: "/documents", label: "Documents", icon: FolderClosed },
-  { href: "/notifications", label: "Notifications", icon: Bell },
+  { href: "/receipts", label: "Reçus", icon: Receipt },
+  { href: "/cash-vouchers", label: "Bons de caisse", icon: Wallet },
+  { href: "/delivery-notes", label: "Bons de sortie", icon: PackageOpen },
   {
     href: "/audit",
     label: "Journal d'audit",
@@ -86,7 +75,7 @@ export function Sidebar({
           <span className="font-heading block truncate text-sm font-semibold">
             {organizationName}
           </span>
-          <span className="block text-xs text-muted-foreground">ImmoOps</span>
+          <span className="block text-xs text-muted-foreground">CaisseOps</span>
         </span>
       </div>
 

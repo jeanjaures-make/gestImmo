@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/kit";
 import { getSession } from "@/lib/auth";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 
-export const metadata = { title: "Votre organisation — ImmoOps" };
+export const metadata = { title: "Votre organisation — CaisseOps" };
 
 export default async function OnboardingPage() {
   if (!isSupabaseConfigured()) redirect("/setup");
@@ -23,7 +23,7 @@ export default async function OnboardingPage() {
           <span className="flex size-11 items-center justify-center rounded-xl bg-primary text-primary-foreground">
             <Building2 className="size-6" />
           </span>
-          <span className="font-heading text-lg font-semibold">ImmoOps</span>
+          <span className="font-heading text-lg font-semibold">CaisseOps</span>
         </div>
 
         <Card>
@@ -32,8 +32,9 @@ export default async function OnboardingPage() {
               Créons votre organisation
             </h1>
             <p className="mb-6 text-sm text-muted-foreground">
-              Elle cloisonne l&apos;intégralité de vos données. Vous en serez le
-              propriétaire et pourrez y inviter des collaborateurs.
+              Elle cloisonne l&apos;intégralité de vos données et porte
+              l&apos;en-tête de vos pièces. Vous en serez le propriétaire et
+              pourrez y inviter des collaborateurs.
             </p>
 
             <OnboardingForm />

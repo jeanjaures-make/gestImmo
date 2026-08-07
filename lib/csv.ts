@@ -26,7 +26,7 @@ const SEPARATOR = ";";
  * Neutralise les cellules interprétées comme formules.
  *
  * Excel, LibreOffice et Google Sheets exécutent le contenu d'une cellule qui
- * commence par `=`, `+`, `-` ou `@`. Un locataire nommé `=cmd|…` deviendrait
+ * commence par `=`, `+`, `-` ou `@`. Un payeur nommé `=cmd|…` deviendrait
  * une commande exécutée sur le poste du gestionnaire qui ouvre l'export.
  * Le préfixe apostrophe force l'interprétation en texte ; il est invisible
  * dans la cellule.
@@ -83,5 +83,5 @@ export function csvFilename(dataset: string, organization: string): string {
     .slice(0, 40);
 
   const day = new Date().toISOString().slice(0, 10);
-  return `${slug || "immoops"}-${dataset}-${day}.csv`;
+  return `${slug || "caisseops"}-${dataset}-${day}.csv`;
 }

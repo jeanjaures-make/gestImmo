@@ -3,10 +3,10 @@
  *
  *   npm run verify:rls
  *
- * Crée deux organisations jetables et un compte locataire, vérifie
- * qu'aucun périmètre ne déborde sur l'autre, puis supprime tout ce qu'il a
- * créé. À lancer sur un projet de développement, jamais en production :
- * le script écrit en base.
+ * Crée deux organisations jetables et quelques comptes, vérifie qu'aucun
+ * périmètre ne déborde sur l'autre, puis supprime tout ce qu'il a créé. À
+ * lancer sur un projet de développement, jamais en production : le script
+ * écrit en base.
  *
  * Ce fichier existe parce qu'une politique RLS relue n'est pas une
  * politique RLS testée. Les erreurs de cloisonnement ne se voient pas à
@@ -86,6 +86,45 @@ async function signedInUser(tag) {
 }
 
 /**
+ * Crée un membre de l'organisation, avec un rôle donné, et le connecte.
+ *
+ * Le profil est inséré avec la clé service_role : c'est le chemin que suit
+ * l'invitation d'un collaborateur, et la seule façon d'obtenir un rôle
+ * autre que « owner » — aucune policy n'autorise l'INSERT dans `profiles`.
+ */
+async function member(tag, orgId, role) {
+  const email = `verif-${tag}-${stamp}@example.invalid`;
+  const { data, error } = await admin.auth.admin.createUser({
+    email, password: PWD, email_confirm: true,
+  });
+  if (error) throw new Error(`création du compte ${tag} : ${error.message}`);
+  created.users.push(data.user.id);
+
+  const { error: profileError } = await admin.from("profiles").insert({
+    id: data.user.id, organization_id: orgId,
+    firstname: "Test", lastname: tag, email, role,
+  });
+  if (profileError) throw new Error(`profil ${tag} : ${profileError.message}`);
+
+  const client = createClient(URL, ANON, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  await client.auth.signInWithPassword({ email, password: PWD });
+  return { client, email, id: data.user.id };
+}
+
+/** Une pièce minimale de chaque nature. Le numéro n'est jamais fourni. */
+const receiptDraft = (orgId) => ({
+  organization_id: orgId, issued_on: "2026-01-15",
+  payer: "Awa Diallo", amount: 250000,
+});
+
+const voucherDraft = (orgId) => ({
+  organization_id: orgId, issued_on: "2026-01-15",
+  counterparty: "Awa Diallo", amount: 120000, direction: "sortie",
+});
+
+/**
  * Suppression manuelle, enfants avant parents.
  *
  * `DELETE FROM organizations` seul suffirait si le trigger d'audit ne
@@ -95,9 +134,8 @@ async function signedInUser(tag) {
  * jour, sinon il abandonne ses propres déchets.
  */
 const CLEANUP_ORDER = [
-  "payment_declarations", "notifications", "rent_payments", "leases",
-  "apartments", "tenants", "expenses", "maintenance", "documents",
-  "buildings", "audit_logs", "profiles",
+  "delivery_note_lines", "delivery_notes", "cash_vouchers", "receipts",
+  "document_counters", "audit_logs", "profiles",
 ];
 
 async function cleanup() {
@@ -125,50 +163,95 @@ try {
   }
   check(true, "create_organization crée l'organisation et son profil propriétaire");
 
-  const { data: bld, error: bErr } = await a.client.from("buildings")
-    .insert({ organization_id: a.orgId, name: "Immeuble A", address: "1 rue A", city: "Paris" })
+  const { data: receipt, error: rErr } = await a.client
+    .from("receipts").insert(receiptDraft(a.orgId)).select().single();
+  if (rErr) throw new Error(`émission d'un reçu : ${rErr.message}`);
+
+  const { data: voucher, error: vErr } = await a.client
+    .from("cash_vouchers").insert(voucherDraft(a.orgId)).select().single();
+  if (vErr) throw new Error(`émission d'un bon de caisse : ${vErr.message}`);
+
+  const { data: note, error: nErr } = await a.client.from("delivery_notes")
+    .insert({ organization_id: a.orgId, issued_on: "2026-01-15", issuer: "Awa Diallo" })
     .select().single();
-  if (bErr) throw new Error(`création immeuble : ${bErr.message}`);
-  const { data: apt } = await a.client.from("apartments")
-    .insert({ organization_id: a.orgId, building_id: bld.id, number: "A1" })
+  if (nErr) throw new Error(`émission d'un bon de sortie : ${nErr.message}`);
+
+  const { error: lineErr } = await a.client.from("delivery_note_lines").insert({
+    organization_id: a.orgId, delivery_note_id: note.id,
+    position: 0, designation: "Tôles galvanisées", quantity: "12",
+  });
+  if (lineErr) throw new Error(`ligne de bon de sortie : ${lineErr.message}`);
+  check(true, "A émet un reçu, un bon de caisse et un bon de sortie");
+
+  console.log("\nNUMÉROTATION");
+  check(
+    receipt.number === "REC-2026-0001",
+    "le premier reçu de l'année porte REC-2026-0001",
+    `obtenu : ${receipt.number}`,
+  );
+  check(
+    voucher.number === "BC-2026-0001" && note.number === "BS-2026-0001",
+    "chaque nature de pièce a son propre compteur",
+    `obtenus : ${voucher.number}, ${note.number}`,
+  );
+
+  const { data: second } = await a.client
+    .from("receipts").insert(receiptDraft(a.orgId)).select().single();
+  check(
+    second?.number === "REC-2026-0002",
+    "la numérotation est continue",
+    `obtenu : ${second?.number}`,
+  );
+
+  // Le déclencheur écrase toute valeur fournie : l'API PostgREST est
+  // publique, un client pourrait sinon choisir son numéro et en produire
+  // deux identiques.
+  const { data: forged } = await a.client.from("receipts")
+    .insert({ ...receiptDraft(a.orgId), number: "REC-2026-9999" })
     .select().single();
-  const { data: tnt } = await a.client.from("tenants")
-    .insert({ organization_id: a.orgId, firstname: "Awa", lastname: "Diallo" })
-    .select().single();
-  const { data: lease } = await a.client.from("leases")
-    .insert({ organization_id: a.orgId, tenant_id: tnt.id, apartment_id: apt.id,
-              rent: 250000, charges: 25000, start_date: "2026-01-01" })
-    .select().single();
-  check(true, "A crée immeuble, logement, locataire et bail");
+  check(
+    forged?.number === "REC-2026-0003",
+    "un numéro imposé par le client est ignoré",
+    `obtenu : ${forged?.number}`,
+  );
+
+  // La numérotation est propre à chaque organisation : B ne doit pas
+  // « hériter » du rang de A, ni deviner combien de pièces A a émises.
+  const { data: bFirst } = await b.client
+    .from("receipts").insert(receiptDraft(b.orgId)).select().single();
+  check(
+    bFirst?.number === "REC-2026-0001",
+    "B repart à REC-2026-0001, sans rien apprendre du volume de A",
+    `obtenu : ${bFirst?.number}`,
+  );
+
+  const { error: renumberErr } = await a.client.from("receipts")
+    .update({ number: "REC-2026-0500" }).eq("id", receipt.id);
+  const { data: numberAfter } = await admin.from("receipts")
+    .select("number").eq("id", receipt.id).single();
+  check(
+    Boolean(renumberErr) && numberAfter.number === receipt.number,
+    "le numéro d'une pièce émise ne se modifie plus",
+    `numéro devenu ${numberAfter?.number}`,
+  );
 
   console.log("\nRÈGLES APPLIQUÉES EN BASE");
-  const { data: aptAfter } = await a.client.from("apartments")
-    .select("status").eq("id", apt.id).single();
-  check(
-    aptAfter.status === "occupied",
-    "le logement passe à « occupé » à la création du bail",
-    `obtenu : ${aptAfter.status}`,
-  );
-
-  const { data: scheduled, error: schedErr } = await a.client
-    .rpc("generate_rent_schedule", { p_lease_id: lease.id, p_months: 3 });
-  check(
-    !schedErr,
-    `generate_rent_schedule produit les échéances (${scheduled ?? 0})`,
-    schedErr?.message,
-  );
-
-  const { data: pays } = await a.client.from("rent_payments").select("id, month");
-  check(
-    pays.every((p) => p.month.endsWith("-01")),
-    "les échéances sont normalisées au 1er du mois",
-  );
-
-  const { error: dupErr } = await a.client.from("leases").insert({
-    organization_id: a.orgId, tenant_id: tnt.id, apartment_id: apt.id,
-    rent: 240000, charges: 0, start_date: "2026-06-01",
+  const { error: depositErr } = await a.client.from("cash_vouchers").insert({
+    ...voucherDraft(a.orgId), settlement: "cash", deposit_ref: "VIR-8891",
   });
-  check(Boolean(dupErr), "un second bail actif sur le même logement est rejeté");
+  check(
+    Boolean(depositErr),
+    "une référence de dépôt sur un règlement en espèces est rejetée",
+    "la pièce a été acceptée",
+  );
+
+  const { error: emptyPayerErr } = await a.client.from("receipts")
+    .insert({ ...receiptDraft(a.orgId), payer: "   " });
+  check(Boolean(emptyPayerErr), "un reçu sans payeur est rejeté");
+
+  const { error: negativeErr } = await a.client.from("receipts")
+    .insert({ ...receiptDraft(a.orgId), amount: -1 });
+  check(Boolean(negativeErr), "un montant négatif est rejeté");
 
   const { data: logs } = await a.client.from("audit_logs").select("id");
   check(
@@ -177,66 +260,87 @@ try {
   );
 
   console.log("\nCLOISONNEMENT ENTRE ORGANISATIONS");
-  for (const t of ["buildings", "apartments", "tenants", "leases", "rent_payments", "audit_logs"]) {
+  for (const t of [
+    "receipts", "cash_vouchers", "delivery_notes", "delivery_note_lines",
+    "document_counters", "audit_logs",
+  ]) {
     const { data, error } = await b.client.from(t).select("*");
     if (error) {
       check(true, `${t} : refusé à B (${error.code})`);
       continue;
     }
-    check(data.length === 0, `${t} : B ne voit rien de A`, `${data.length} ligne(s) visible(s)`);
+    // B a émis un reçu, donc possède son propre compteur et son propre
+    // journal : on vérifie qu'il ne voit rien DE A, pas qu'il ne voit rien.
+    const foreign = (data ?? []).filter((row) => row.organization_id === a.orgId);
+    check(
+      foreign.length === 0,
+      `${t} : B ne voit rien de A`,
+      `${foreign.length} ligne(s) de A visible(s)`,
+    );
   }
-  const { error: crossErr } = await b.client.from("apartments").insert({
-    organization_id: b.orgId, building_id: bld.id, number: "INTRUS",
+
+  // La clé étrangère composite (delivery_note_id, organization_id) rend la
+  // chose structurellement impossible : ce n'est pas une règle applicative.
+  const { error: crossErr } = await b.client.from("delivery_note_lines").insert({
+    organization_id: b.orgId, delivery_note_id: note.id,
+    position: 0, designation: "INTRUS",
   });
   check(
     Boolean(crossErr),
-    `rattacher un logement à l'immeuble de A est rejeté (${crossErr?.code ?? "—"})`,
+    `rattacher un article au bon de sortie de A est rejeté (${crossErr?.code ?? "—"})`,
   );
-
-  console.log("\nPÉRIMÈTRE DU LOCATAIRE");
-  const tenantEmail = `verif-loc-${stamp}@example.invalid`;
-  const { data: tUser, error: tErr } = await admin.auth.admin.createUser({
-    email: tenantEmail, password: PWD, email_confirm: true,
-  });
-  if (tErr) throw new Error(`création du compte locataire : ${tErr.message}`);
-  created.users.push(tUser.user.id);
-  await admin.from("profiles").insert({
-    id: tUser.user.id, organization_id: a.orgId, tenant_id: tnt.id,
-    firstname: "Awa", lastname: "Diallo", email: tenantEmail, role: "viewer",
-  });
-  const tc = createClient(URL, ANON, { auth: { persistSession: false, autoRefreshToken: false } });
-  await tc.auth.signInWithPassword({ email: tenantEmail, password: PWD });
-
-  const { data: myLeases } = await tc.from("leases").select("id");
-  check(myLeases?.length === 1, "il voit son bail", `${myLeases?.length ?? 0} baux visibles`);
-  const { data: myPays } = await tc.from("rent_payments").select("id");
-  check(
-    myPays?.length === scheduled,
-    `il voit ses ${scheduled} échéances`,
-    `${myPays?.length ?? 0} visibles`,
-  );
-  const { data: others } = await tc.from("tenants").select("id");
-  check(
-    others?.length === 1,
-    "il ne voit que sa propre fiche",
-    `${others?.length ?? 0} fiches visibles`,
-  );
-  for (const [t, label] of [["expenses", "les dépenses"], ["audit_logs", "le journal d'audit"]]) {
-    const { data } = await tc.from(t).select("id");
-    check((data?.length ?? 0) === 0, `il ne voit pas ${label}`);
-  }
 
   // Sous RLS, un UPDATE hors périmètre ne lève pas d'erreur : il ne touche
-  // simplement aucune ligne. C'est donc la base qu'on interroge, pas le
-  // code retour.
-  await tc.from("rent_payments")
-    .update({ status: "paid", amount_paid: 1100 }).eq("id", myPays[0].id);
-  const { data: unchanged } = await admin.from("rent_payments")
-    .select("status").eq("id", myPays[0].id).single();
+  // simplement aucune ligne. C'est donc la base qu'on interroge.
+  await b.client.from("receipts").update({ payer: "Détourné" }).eq("id", receipt.id);
+  const { data: payerAfter } = await admin.from("receipts")
+    .select("payer").eq("id", receipt.id).single();
   check(
-    unchanged.status === "pending",
-    "il ne peut pas solder lui-même son échéance",
-    `statut devenu ${unchanged.status}`,
+    payerAfter.payer === "Awa Diallo",
+    "B ne peut pas corriger un reçu de A",
+    `payeur devenu ${payerAfter.payer}`,
+  );
+
+  await b.client.from("receipts").delete().eq("id", receipt.id);
+  const { count: stillThere } = await admin.from("receipts")
+    .select("id", { count: "exact", head: true }).eq("id", receipt.id);
+  check(stillThere === 1, "B ne peut pas supprimer un reçu de A");
+
+  console.log("\nDROITS PAR RÔLE");
+  const cashier = await member("caissier", a.orgId, "accountant");
+  const reader = await member("lecteur", a.orgId, "viewer");
+
+  const { data: byCashier, error: cashierErr } = await cashier.client
+    .from("receipts").insert(receiptDraft(a.orgId)).select().single();
+  check(!cashierErr, "le caissier émet des pièces : c'est son métier", cashierErr?.message);
+
+  const { error: readerErr } = await reader.client
+    .from("receipts").insert(receiptDraft(a.orgId));
+  check(Boolean(readerErr), "le lecteur n'émet rien");
+
+  // Une suppression laisse un trou dans la numérotation, qu'un contrôle
+  // relève : le geste est réservé au propriétaire et au gestionnaire.
+  if (byCashier) {
+    await cashier.client.from("receipts").delete().eq("id", byCashier.id);
+    const { count: survived } = await admin.from("receipts")
+      .select("id", { count: "exact", head: true }).eq("id", byCashier.id);
+    check(survived === 1, "le caissier ne supprime pas ses propres pièces");
+
+    const { data: readable } = await reader.client
+      .from("receipts").select("id").eq("id", byCashier.id);
+    check(readable?.length === 1, "le lecteur consulte et imprime");
+
+    await a.client.from("receipts").delete().eq("id", byCashier.id);
+    const { count: deleted } = await admin.from("receipts")
+      .select("id", { count: "exact", head: true }).eq("id", byCashier.id);
+    check(deleted === 0, "le propriétaire supprime, et lui seul en répond");
+  }
+
+  const { data: cashierLogs } = await cashier.client.from("audit_logs").select("id");
+  check(
+    (cashierLogs?.length ?? 0) === 0,
+    "le journal d'audit reste réservé au propriétaire et au gestionnaire",
+    `${cashierLogs?.length ?? 0} entrée(s) visible(s)`,
   );
 
   /**
@@ -244,9 +348,9 @@ try {
    *
    * Le RLS raisonne par lignes, jamais par colonnes. `profiles_update`
    * autorise chacun à modifier SA ligne — pour corriger son nom — et cette
-   * permission englobait `role` et `tenant_id`. Un locataire exécutait donc
+   * permission englobait `role`. Un lecteur exécutait donc
    *
-   *   UPDATE profiles SET role='owner', tenant_id=NULL WHERE id=auth.uid()
+   *   UPDATE profiles SET role='owner' WHERE id=auth.uid()
    *
    * et devenait propriétaire de l'organisation qui l'héberge. Aucun écran ne
    * proposait ce geste, mais l'API PostgREST est publique : le formulaire
@@ -257,104 +361,71 @@ try {
    */
   console.log("\nESCALADE DE PRIVILÈGES");
 
-  await tc.from("profiles").update({ role: "owner" }).eq("id", tUser.user.id);
+  await reader.client.from("profiles").update({ role: "owner" }).eq("id", reader.id);
   const { data: roleAfter } = await admin.from("profiles")
-    .select("role").eq("id", tUser.user.id).single();
+    .select("role").eq("id", reader.id).single();
   check(
     roleAfter.role === "viewer",
-    "un locataire ne peut pas se promouvoir propriétaire",
+    "un lecteur ne peut pas se promouvoir propriétaire",
     `rôle devenu ${roleAfter.role}`,
   );
 
-  await tc.from("profiles").update({ tenant_id: null }).eq("id", tUser.user.id);
-  const { data: linkAfter } = await admin.from("profiles")
-    .select("tenant_id").eq("id", tUser.user.id).single();
+  // Le caissier non plus, alors qu'il a le droit d'écrire des pièces : le
+  // droit d'écriture métier n'est pas un droit d'administration.
+  await cashier.client.from("profiles").update({ role: "owner" }).eq("id", cashier.id);
+  const { data: cashierRole } = await admin.from("profiles")
+    .select("role").eq("id", cashier.id).single();
   check(
-    linkAfter.tenant_id === tnt.id,
-    "il ne peut pas se détacher de sa fiche pour devenir membre du personnel",
-    "tenant_id remis à NULL",
+    cashierRole.role === "accountant",
+    "le caissier ne se promeut pas non plus",
+    `rôle devenu ${cashierRole.role}`,
   );
 
-  await tc.from("tenants")
-    .update({ organization_id: b.orgId }).eq("id", tnt.id);
-  const { data: orgAfter } = await admin.from("tenants")
-    .select("organization_id").eq("id", tnt.id).single();
+  await reader.client.from("profiles")
+    .update({ organization_id: b.orgId }).eq("id", reader.id);
+  const { data: orgAfter } = await admin.from("profiles")
+    .select("organization_id").eq("id", reader.id).single();
   check(
     orgAfter.organization_id === a.orgId,
-    "il ne peut pas déplacer sa fiche vers une autre organisation",
-    "fiche transférée chez B",
+    "il ne peut pas se rattacher à une autre organisation",
+    "profil transféré chez B",
+  );
+
+  await reader.client.from("organizations")
+    .update({ name: "Détournée" }).eq("id", a.orgId);
+  const { data: orgName } = await admin.from("organizations")
+    .select("name").eq("id", a.orgId).single();
+  check(
+    orgName.name.startsWith("Vérification A"),
+    "l'en-tête imprimé n'appartient qu'au propriétaire",
+    `nom devenu ${orgName.name}`,
   );
 
   // Le verrou ne doit pas emporter le geste légitime avec lui : sans cette
   // assertion, on « corrigerait » la faille en cassant la gestion d'équipe.
-  const staffEmail = `verif-role-${stamp}@example.invalid`;
-  const { data: staffUser } = await admin.auth.admin.createUser({
-    email: staffEmail, password: PWD, email_confirm: true,
-  });
-  created.users.push(staffUser.user.id);
-  await admin.from("profiles").insert({
-    id: staffUser.user.id, organization_id: a.orgId,
-    firstname: "Test", lastname: "Rôle", email: staffEmail, role: "viewer",
-  });
-
   const { error: promoteErr } = await a.client
-    .from("profiles").update({ role: "manager" }).eq("id", staffUser.user.id);
+    .from("profiles").update({ role: "manager" }).eq("id", reader.id);
   const { data: promoted } = await admin.from("profiles")
-    .select("role").eq("id", staffUser.user.id).single();
+    .select("role").eq("id", reader.id).single();
   check(
     promoted.role === "manager",
     "un propriétaire promeut toujours un collaborateur",
     `rôle resté ${promoted.role}${promoteErr ? ` (${promoteErr.message})` : ""}`,
   );
 
-  // Et un simple gestionnaire ne redistribue pas les rôles.
-  const { data: viewerUser } = await admin.auth.admin.createUser({
-    email: `verif-viewer-${stamp}@example.invalid`, password: PWD, email_confirm: true,
-  });
-  created.users.push(viewerUser.user.id);
-  await admin.from("profiles").insert({
-    id: viewerUser.user.id, organization_id: a.orgId, firstname: "Sans",
-    lastname: "Droit", email: `verif-viewer-${stamp}@example.invalid`, role: "viewer",
-  });
-  const vc = createClient(URL, ANON, { auth: { persistSession: false, autoRefreshToken: false } });
-  await vc.auth.signInWithPassword({
-    email: `verif-viewer-${stamp}@example.invalid`, password: PWD,
-  });
-  await vc.from("profiles").update({ role: "owner" }).eq("id", viewerUser.user.id);
-  const { data: viewerAfter } = await admin.from("profiles")
-    .select("role").eq("id", viewerUser.user.id).single();
-  check(
-    viewerAfter.role === "viewer",
-    "un collaborateur en lecture seule ne se promeut pas non plus",
-    `rôle devenu ${viewerAfter.role}`,
-  );
-
-  console.log("\nDÉCLARATION ET VALIDATION D'UN RÈGLEMENT");
-  const { error: declErr } = await tc.from("payment_declarations").insert({
-    organization_id: a.orgId, rent_payment_id: myPays[0].id, tenant_id: tnt.id,
-    amount: 100000, paid_on: "2026-01-05", method: "Virement bancaire", status: "pending",
-  });
-  check(!declErr, "le locataire déclare un règlement", declErr?.message);
-
-  const { data: notifs } = await admin.from("notifications").select("kind");
-  check(
-    Boolean(notifs?.some((n) => n.kind === "payment_declared")),
-    "le personnel est notifié par trigger",
-  );
-
-  const { data: decl } = await admin.from("payment_declarations")
-    .select("id").eq("organization_id", a.orgId).single();
-  const { error: revErr } = await a.client
-    .rpc("review_payment_declaration", { p_id: decl.id, p_accept: true });
-  if (revErr) {
-    fail(`review_payment_declaration : ${revErr.message}`);
+  console.log("\nRECHERCHE GLOBALE");
+  // La fonction n'est pas SECURITY DEFINER : le RLS s'y applique. Une
+  // recherche qui remonterait la pièce d'un autre serait une fuite.
+  const { data: hits, error: searchErr } = await b.client
+    .rpc("global_search", { q: "Awa Diallo", max_results: 20 });
+  if (searchErr) {
+    fail(`global_search : ${searchErr.message}`);
   } else {
-    const { data: after } = await admin.from("rent_payments")
-      .select("status, amount_paid").eq("id", myPays[0].id).single();
+    const leaked = (hits ?? []).filter((h) => h.title?.startsWith("REC-2026-000") === false);
     check(
-      after.status === "partial" && Number(after.amount_paid) === 100000,
-      "la validation encaisse 100 000 F CFA et passe l'échéance en « partiel »",
-      `statut ${after.status}, encaissé ${after.amount_paid}`,
+      (hits ?? []).length === 1,
+      "B ne trouve que sa propre pièce en cherchant un nom partagé",
+      `${(hits ?? []).length} résultat(s), dont ${leaked.length} inattendu(s)`,
     );
   }
 } catch (e) {

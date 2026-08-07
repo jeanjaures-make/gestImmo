@@ -8,7 +8,7 @@ import { isSupabaseConfigured, supabaseEnv } from "./env";
  *
  * `/` est la page de présentation publique : elle doit s'ouvrir sans
  * compte, sinon un visiteur ne rencontre jamais que l'écran de connexion.
- * L'application, elle, vit sous `/dashboard` et `/portal`.
+ * L'application, elle, vit sous `/dashboard` et les trois carnets.
  */
 const PUBLIC_PATHS = [
   "/",

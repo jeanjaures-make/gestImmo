@@ -37,6 +37,29 @@ const optionalText = (max: number) =>
       .nullable(),
   );
 
+/**
+ * Texte facultatif rendu en chaîne vide plutôt qu'en `null`.
+ *
+ * Les colonnes des pièces imprimées sont `NOT NULL DEFAULT ''` : un champ
+ * laissé vide correspond à une ligne de pointillés vide sur le papier, pas
+ * à une valeur inconnue. La distinction `null` / `''` n'apporterait rien
+ * et forcerait des `?? ""` à chaque affichage.
+ */
+const plainText = (max: number) =>
+  z.preprocess(
+    blankIfMissing,
+    z.string().trim().max(max, { message: `Ce champ dépasse ${max} caractères.` }),
+  );
+
+const optionalEmail = z.preprocess(
+  blankIfMissing,
+  z
+    .string()
+    .trim()
+    .transform((v) => (v === "" ? null : v))
+    .pipe(z.email({ message: "Adresse e-mail invalide." }).nullable()),
+);
+
 // Les <input type="number"> renvoient des chaînes ; on accepte aussi la
 // virgule décimale, usuelle en français.
 // Une chaîne vide devient NaN et non 0 : un champ montant laissé vide doit
@@ -51,32 +74,30 @@ const money = z
       .min(0, { message: "Le montant doit être positif." }),
   );
 
-const optionalMoney = z.preprocess(
+/**
+ * Montant secondaire : vide vaut zéro.
+ *
+ * « Avance » et « Reste » sont des colonnes `NOT NULL DEFAULT 0`. Sur le
+ * papier, une case laissée blanche se lit « rien versé », pas « montant
+ * inconnu » — la traduire en zéro est fidèle, et évite un `null` qui
+ * fausserait ensuite tout calcul de totaux.
+ */
+const defaultedMoney = z.preprocess(
   blankIfMissing,
   z
     .string()
     .trim()
-    .transform((v) => (v === "" ? null : Number(v.replace(",", "."))))
+    .transform((v) => (v === "" ? 0 : Number(v.replace(",", "."))))
     .pipe(
       z
         .number({ message: "Montant invalide." })
-        .min(0, { message: "Le montant doit être positif." })
-        .nullable(),
+        .min(0, { message: "Le montant doit être positif." }),
     ),
 );
 
 const isoDate = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, { message: "Date invalide." });
-
-const optionalIsoDate = z.preprocess(
-  blankIfMissing,
-  z
-    .string()
-    .trim()
-    .transform((v) => (v === "" ? null : v))
-    .pipe(isoDate.nullable()),
-);
 
 /**
  * Mot de passe.
@@ -171,99 +192,119 @@ export const profileSchema = z.object({
   lastname: optionalText(80),
 });
 
-/** Réglages de l'organisation. Le logo est traité à part : c'est un fichier. */
+/**
+ * En-tête imprimé de l'entreprise.
+ *
+ * Tout est facultatif sauf le nom : une entreprise qui vient de
+ * s'inscrire doit pouvoir émettre son premier reçu sans avoir d'abord
+ * rempli dix champs. Le logo est traité à part : c'est un fichier.
+ */
 export const organizationSettingsSchema = z.object({
   name: text(2, 120, "Le nom de l'organisation"),
+  legal_form: optionalText(40),
+  trade_name: optionalText(160),
+  tagline: optionalText(160),
+  // Une activité par ligne dans le champ de saisie : c'est la forme la
+  // plus proche des puces telles qu'elles s'impriment.
+  activities: z.preprocess(
+    blankIfMissing,
+    z
+      .string()
+      .max(1200, { message: "La liste des activités est trop longue." })
+      .transform((v) =>
+        v
+          .split("\n")
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .slice(0, 12),
+      ),
+  ),
+  address: optionalText(240),
+  phone: optionalText(60),
+  phone_alt: optionalText(60),
+  email: optionalEmail,
+  email_alt: optionalEmail,
+  website: optionalText(120),
 });
 
-export const buildingSchema = z.object({
-  name: text(1, 120, "Le nom"),
-  address: text(1, 200, "L'adresse"),
-  city: text(1, 120, "La ville"),
-  country: z.string().trim().max(80).default("France"),
-  estimated_value: optionalMoney,
+// --------------------------------------------------------- pièces de caisse
+
+export const receiptSchema = z.object({
+  issued_on: isoDate,
+  payer: text(1, 160, "Le nom du payeur"),
+  amount: money,
+  amount_in_words: plainText(300),
+  articles: plainText(500),
+  advance: defaultedMoney,
+  balance: defaultedMoney,
+  issued_by: plainText(120),
 });
 
-export const apartmentSchema = z.object({
-  building_id: z.uuid({ message: "Immeuble invalide." }),
-  number: text(1, 40, "Le numéro"),
-  floor: optionalText(20),
-  type: optionalText(40),
-  surface: optionalMoney,
-  status: z.enum(["vacant", "occupied", "maintenance"]).default("vacant"),
-});
-
-export const tenantSchema = z.object({
-  firstname: text(1, 80, "Le prénom"),
-  lastname: text(1, 80, "Le nom"),
-  phone: optionalText(40),
-  email: z
-    .string()
-    .trim()
-    .transform((v) => (v === "" ? null : v))
-    .pipe(z.email({ message: "Adresse e-mail invalide." }).nullable()),
-  identity_number: optionalText(80),
-});
-
-export const leaseSchema = z
+export const cashVoucherSchema = z
   .object({
-    tenant_id: z.uuid({ message: "Locataire invalide." }),
-    apartment_id: z.uuid({ message: "Logement invalide." }),
-    rent: money,
-    charges: optionalMoney,
-    deposit: optionalMoney,
-    status: z.enum(["draft", "active", "ended", "terminated"]).default("active"),
-    start_date: isoDate,
-    end_date: optionalIsoDate,
+    issued_on: isoDate,
+    direction: z.enum(["entree", "sortie"]).default("sortie"),
+    amount: money,
+    amount_in_words: plainText(300),
+    counterparty: text(1, 160, "Le nom du bénéficiaire"),
+    reason: plainText(300),
+    advance: defaultedMoney,
+    balance: defaultedMoney,
+    ordered_by: plainText(120),
+    settlement: z.enum(["cash", "depot"]).default("cash"),
+    deposit_ref: optionalText(120),
+    account: z.enum(["personal", "company"]).default("company"),
   })
-  .refine((v) => !v.end_date || v.end_date > v.start_date, {
-    message: "La date de fin doit être postérieure à la date de début.",
-    path: ["end_date"],
-  });
+  // Le formulaire garde la référence saisie quand on rebascule sur
+  // « Cash » ; sans ce nettoyage, elle partirait en base et la contrainte
+  // PostgreSQL rejetterait l'enregistrement avec un message opaque.
+  .transform((v) => ({
+    ...v,
+    deposit_ref: v.settlement === "depot" ? v.deposit_ref : null,
+  }));
 
-export const paymentSchema = z.object({
-  lease_id: z.uuid({ message: "Bail invalide." }),
-  month: isoDate,
-  amount: money,
-  amount_paid: optionalMoney,
-  status: z.enum(["pending", "paid", "partial", "late"]).default("pending"),
-  payment_date: optionalIsoDate,
-  method: optionalText(60),
-  note: optionalText(500),
+export const deliveryNoteSchema = z.object({
+  issued_on: isoDate,
+  issuer: text(1, 160, "Le nom de l'émetteur"),
+  service: plainText(120),
+  nota: plainText(160),
 });
 
-export const expenseSchema = z.object({
-  building_id: z.uuid({ message: "Immeuble invalide." }),
-  category: z
-    .enum([
-      "maintenance",
-      "taxes",
-      "insurance",
-      "utilities",
-      "management",
-      "works",
-      "other",
-    ])
-    .default("other"),
-  label: text(1, 160, "Le libellé"),
-  amount: money,
-  expense_date: isoDate,
+/** Une ligne du tableau d'un bon de sortie. */
+export const deliveryLineSchema = z.object({
+  designation: text(1, 200, "La désignation"),
+  quantity: plainText(60),
+  destination: plainText(160),
+  observations: plainText(200),
 });
 
-export const maintenanceSchema = z.object({
-  building_id: z.uuid({ message: "Immeuble invalide." }),
-  apartment_id: z
-    .string()
-    .trim()
-    .transform((v) => (v === "" ? null : v))
-    .pipe(z.uuid({ message: "Logement invalide." }).nullable()),
-  title: text(1, 160, "L'intitulé"),
-  description: optionalText(2000),
-  priority: z.enum(["low", "medium", "high", "urgent"]).default("medium"),
-  status: z
-    .enum(["open", "in_progress", "resolved", "cancelled"])
-    .default("open"),
-});
+/**
+ * Les lignes d'un bon de sortie, lues depuis le FormData.
+ *
+ * `formDataToObject` écrase les clés répétées : il ne peut pas servir
+ * ici. On lit donc les quatre colonnes en parallèle, et on écarte les
+ * lignes entièrement vides — le formulaire en propose toujours quelques
+ * unes d'avance, et l'utilisateur n'a pas à les effacer.
+ */
+export function readDeliveryLines(formData: FormData) {
+  const designations = formData.getAll("designation").map(String);
+  const quantities = formData.getAll("quantity").map(String);
+  const destinations = formData.getAll("destination").map(String);
+  const observations = formData.getAll("observations").map(String);
+
+  const rows = designations
+    .map((designation, index) => ({
+      designation,
+      quantity: quantities[index] ?? "",
+      destination: destinations[index] ?? "",
+      observations: observations[index] ?? "",
+    }))
+    .filter((row) => Object.values(row).some((cell) => cell.trim() !== ""));
+
+  return z.array(deliveryLineSchema).min(1, {
+    message: "Renseignez au moins un article.",
+  }).safeParse(rows);
+}
 
 /** Convertit un FormData en objet simple avant validation Zod. */
 export function formDataToObject(formData: FormData) {

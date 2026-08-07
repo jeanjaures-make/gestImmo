@@ -25,7 +25,7 @@ import {
 } from "@/lib/types";
 import { inviteMember } from "./actions";
 
-export const metadata = { title: "Équipe — ImmoOps" };
+export const metadata = { title: "Équipe — CaisseOps" };
 
 export default async function TeamPage() {
   const { profile, organization, userId } = await requireSession();

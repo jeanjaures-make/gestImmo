@@ -4,7 +4,7 @@ import { AuthForm, EmailField } from "@/components/auth-form";
 import { Card, CardContent } from "@/components/ui/kit";
 import { requestPasswordReset } from "../login/actions";
 
-export const metadata = { title: "Mot de passe oublié — ImmoOps" };
+export const metadata = { title: "Mot de passe oublié — CaisseOps" };
 
 export default function ForgotPasswordPage() {
   return (

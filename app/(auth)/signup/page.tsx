@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/kit";
 import { signupMode, signupNeedsAttention } from "@/lib/auth-config";
 import { signUp } from "../login/actions";
 
-export const metadata = { title: "Créer une organisation — ImmoOps" };
+export const metadata = { title: "Créer une organisation — CaisseOps" };
 
 export default function SignUpPage() {
   const mode = signupMode();
@@ -30,7 +30,7 @@ export default function SignUpPage() {
           <p className="mb-5 flex items-start gap-2 rounded-lg bg-warning/10 p-3 text-sm text-warning">
             <AlertTriangle className="mt-0.5 size-4 shrink-0" />
             L&apos;inscription est momentanément indisponible. Écrivez-nous à
-            contact@immoops.fr, nous ouvrons votre accès.
+            contact@caisseops.com, nous ouvrons votre accès.
           </p>
         )}
 

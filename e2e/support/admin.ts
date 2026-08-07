@@ -73,7 +73,7 @@ export async function confirmEmail(email: string) {
   return !error;
 }
 
-/** Pose un mot de passe : équivaut au lien d'invitation suivi par le locataire. */
+/** Pose un mot de passe : équivaut au lien d'invitation suivi par le membre. */
 export async function setPassword(email: string, password = TEST_PASSWORD) {
   const user = await findUser(email);
   if (!user) throw new Error(`Compte introuvable : ${email}`);
@@ -94,9 +94,8 @@ export async function setPassword(email: string, password = TEST_PASSWORD) {
  * échoue laisse ses déchets derrière lui.
  */
 const CHILDREN = [
-  "payment_declarations", "notifications", "rent_payments", "leases",
-  "apartments", "tenants", "expenses", "maintenance", "documents",
-  "buildings", "audit_logs", "profiles",
+  "delivery_note_lines", "delivery_notes", "cash_vouchers", "receipts",
+  "document_counters", "audit_logs", "profiles",
 ];
 
 export async function deleteOrganizationsNamed(prefix: string) {

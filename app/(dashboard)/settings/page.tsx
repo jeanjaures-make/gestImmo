@@ -3,6 +3,7 @@ import { Monitor, ShieldCheck } from "lucide-react";
 
 import { SettingsForm } from "@/components/settings-form";
 import { SignOutEverywhere } from "@/components/sign-out-everywhere";
+import { LetterheadPreview } from "@/components/letterhead";
 import {
   Card,
   CardContent,
@@ -10,20 +11,15 @@ import {
   Input,
   PageHeader,
   StatusBadge,
+  Textarea,
 } from "@/components/ui/kit";
 import { canAdminister, requireSession } from "@/lib/auth";
 import { LOGO_TYPES } from "@/lib/logo";
-import { NOTIFICATION_PREFERENCES } from "@/lib/notifications";
 import { createClient } from "@/lib/supabase/server";
 import { formatRelative, ROLE_LABELS } from "@/lib/types";
-import {
-  changePassword,
-  updateNotificationPreferences,
-  updateOrganization,
-  updateProfile,
-} from "./actions";
+import { changePassword, updateOrganization, updateProfile } from "./actions";
 
-export const metadata = { title: "Réglages — ImmoOps" };
+export const metadata = { title: "Réglages — CaisseOps" };
 
 /** Ce que l'appareil dit de lui-même, ramené à quelque chose de lisible. */
 function describeDevice(userAgent: string | null): string {
@@ -85,19 +81,189 @@ export default async function SettingsPage() {
   const total = loginCount ?? 0;
   const shown = logins?.length ?? 0;
 
-  // La colonne peut manquer si le schéma n'a pas encore été rejoué : on
-  // retombe alors sur « rien de coupé », plutôt que sur un écran en erreur.
-  const muted = (profile as { muted_notifications?: string[] })
-    .muted_notifications ?? [];
-
   return (
     <>
       <PageHeader
         title="Réglages"
-        description="Votre compte, votre sécurité et votre organisation."
+        description="Votre compte, votre sécurité et l'en-tête de vos pièces."
       />
 
       <div className="flex max-w-3xl flex-col gap-6">
+        {/* --------------------------------------------------- En-tête */}
+        {isOwner ? (
+          <>
+            <SettingsForm
+              title="En-tête de vos pièces"
+              description="Ce bloc s'imprime en haut de chaque reçu, bon de caisse et bon de sortie. Tout est facultatif sauf le nom : complétez au fil de l'eau, vos pièces restent émettables entre-temps."
+              submitLabel="Enregistrer l'en-tête"
+              successMessage="En-tête mis à jour."
+              action={updateOrganization}
+            >
+              <Field label="Raison sociale">
+                <Input
+                  name="name"
+                  defaultValue={organization.name}
+                  placeholder="SOTIP-CI"
+                  required
+                  maxLength={120}
+                />
+              </Field>
+              <Field label="Forme juridique" hint="S.A.R.L., S.A., E.I…">
+                <Input
+                  name="legal_form"
+                  defaultValue={organization.legal_form ?? ""}
+                  placeholder="S.A.R.L."
+                  maxLength={40}
+                />
+              </Field>
+              <Field
+                label="Sous-titre"
+                hint="La ligne sous la raison sociale."
+              >
+                <Input
+                  name="trade_name"
+                  defaultValue={organization.trade_name ?? ""}
+                  placeholder="Société de travaux industriels et de prestation"
+                  maxLength={160}
+                />
+              </Field>
+              <Field label="Accroche" hint="Votre signature commerciale.">
+                <Input
+                  name="tagline"
+                  defaultValue={organization.tagline ?? ""}
+                  placeholder="Votre domaine, notre expertise."
+                  maxLength={160}
+                />
+              </Field>
+
+              <div className="sm:col-span-2">
+                <Field
+                  label="Domaines d'activité"
+                  hint="Une activité par ligne, douze au maximum. Elles s'impriment en puces à droite du logo."
+                >
+                  <Textarea
+                    name="activities"
+                    rows={4}
+                    defaultValue={organization.activities.join("\n")}
+                    placeholder={
+                      "Structures métalliques et mixtes, calorifugeage\nChaudronnerie, soudure industrielle, tuyauterie\nSablage et peinture, maintenance industrielle"
+                    }
+                  />
+                </Field>
+              </div>
+
+              <div className="sm:col-span-2">
+                <Field label="Adresse">
+                  <Input
+                    name="address"
+                    defaultValue={organization.address ?? ""}
+                    placeholder="Marcory Anoumabo au palmier, rue Bamba Kassoum"
+                    maxLength={240}
+                  />
+                </Field>
+              </div>
+
+              <Field label="Téléphone">
+                <Input
+                  name="phone"
+                  defaultValue={organization.phone ?? ""}
+                  placeholder="(+225) 07 48 26 95 74"
+                  maxLength={60}
+                />
+              </Field>
+              <Field label="Téléphone secondaire">
+                <Input
+                  name="phone_alt"
+                  defaultValue={organization.phone_alt ?? ""}
+                  placeholder="(+225) 07 48 09 80 09"
+                  maxLength={60}
+                />
+              </Field>
+              <Field label="E-mail">
+                <Input
+                  name="email"
+                  type="email"
+                  defaultValue={organization.email ?? ""}
+                  placeholder="contact@exemple.com"
+                  maxLength={120}
+                />
+              </Field>
+              <Field label="E-mail secondaire">
+                <Input
+                  name="email_alt"
+                  type="email"
+                  defaultValue={organization.email_alt ?? ""}
+                  maxLength={120}
+                />
+              </Field>
+              <Field label="Site web">
+                <Input
+                  name="website"
+                  defaultValue={organization.website ?? ""}
+                  placeholder="www.exemple.com"
+                  maxLength={120}
+                />
+              </Field>
+
+              <Field
+                label="Logo"
+                hint="PNG, JPEG, WebP ou SVG, 1 Mo maximum. Laissez vide pour conserver le logo actuel."
+              >
+                <div className="flex items-center gap-3">
+                  {organization.logo_url && (
+                    <Image
+                      src={organization.logo_url}
+                      alt={`Logo actuel de ${organization.name}`}
+                      width={40}
+                      height={40}
+                      className="size-10 shrink-0 rounded-lg border object-contain"
+                    />
+                  )}
+                  <Input
+                    name="logo"
+                    type="file"
+                    accept={LOGO_TYPES.join(",")}
+                    className="h-auto py-1.5"
+                  />
+                </div>
+              </Field>
+            </SettingsForm>
+
+            {/* Voir le résultat sans avoir à émettre une pièce pour
+                vérifier : c'est ici qu'on ajuste, pas sur un reçu réel. */}
+            <Card>
+              <CardContent className="p-5">
+                <h2 className="font-heading font-medium">
+                  Aperçu de l&apos;en-tête
+                </h2>
+                <p className="mt-1 mb-4 text-sm text-muted-foreground">
+                  Tel qu&apos;il s&apos;imprimera, une fois vos modifications
+                  enregistrées.
+                </p>
+                <div className="overflow-x-auto rounded-lg border bg-white p-4">
+                  <LetterheadPreview organization={organization} />
+                </div>
+              </CardContent>
+            </Card>
+          </>
+        ) : (
+          <Card>
+            <CardContent className="flex gap-4 p-5">
+              <ShieldCheck className="mt-0.5 size-5 shrink-0 text-muted-foreground" />
+              <div>
+                <h2 className="font-heading font-medium">
+                  En-tête de vos pièces
+                </h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Vous appartenez à « {organization.name} » en tant que{" "}
+                  {ROLE_LABELS[profile.role].toLowerCase()}. L&apos;en-tête
+                  imprimé n&apos;est modifiable que par un propriétaire.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* ------------------------------------------------------- Profil */}
         <SettingsForm
           title="Votre profil"
@@ -160,36 +326,6 @@ export default async function SettingsPage() {
           </Field>
         </SettingsForm>
 
-        {/* --------------------------------------------------- Préférences */}
-        <SettingsForm
-          title="Ce dont vous voulez être averti"
-          description="Les notifications décochées cessent d'apparaître et de compter dans la pastille. Rien n'est perdu : les réactiver fait réapparaître l'historique."
-          submitLabel="Enregistrer"
-          successMessage="Préférences enregistrées."
-          action={updateNotificationPreferences}
-        >
-          {NOTIFICATION_PREFERENCES.map(({ kind, label, hint }) => (
-            <label
-              key={kind}
-              className="flex min-h-11 items-start gap-3 sm:col-span-2"
-            >
-              <input
-                type="checkbox"
-                name="kinds"
-                value={kind}
-                defaultChecked={!muted.includes(kind)}
-                className="mt-0.5 size-4 shrink-0 accent-primary"
-              />
-              <span>
-                <span className="block text-sm font-medium">{label}</span>
-                <span className="block text-xs text-muted-foreground">
-                  {hint}
-                </span>
-              </span>
-            </label>
-          ))}
-        </SettingsForm>
-
         {/* ----------------------------------------------------- Connexions */}
         <Card>
           <CardContent className="p-5">
@@ -234,64 +370,6 @@ export default async function SettingsPage() {
             </div>
           </CardContent>
         </Card>
-
-        {/* --------------------------------------------------- Organisation */}
-        {isOwner ? (
-          <SettingsForm
-            title="Votre organisation"
-            description="Le nom et le logo apparaissent dans le bandeau latéral et sur les quittances remises à vos locataires."
-            submitLabel="Enregistrer"
-            successMessage="Organisation mise à jour."
-            action={updateOrganization}
-          >
-            <Field label="Nom de l'organisation">
-              <Input
-                name="name"
-                defaultValue={organization.name}
-                required
-                maxLength={120}
-              />
-            </Field>
-            <Field
-              label="Logo"
-              hint="PNG, JPEG, WebP ou SVG, 1 Mo maximum. Laissez vide pour conserver le logo actuel."
-            >
-              <div className="flex items-center gap-3">
-                {organization.logo_url && (
-                  <Image
-                    src={organization.logo_url}
-                    alt={`Logo actuel de ${organization.name}`}
-                    width={40}
-                    height={40}
-                    className="size-10 shrink-0 rounded-lg border object-contain"
-                  />
-                )}
-                <Input
-                  name="logo"
-                  type="file"
-                  accept={LOGO_TYPES.join(",")}
-                  className="h-auto py-1.5"
-                />
-              </div>
-            </Field>
-          </SettingsForm>
-        ) : (
-          <Card>
-            <CardContent className="flex gap-4 p-5">
-              <ShieldCheck className="mt-0.5 size-5 shrink-0 text-muted-foreground" />
-              <div>
-                <h2 className="font-heading font-medium">
-                  Votre organisation
-                </h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Vous appartenez à « {organization.name} » en tant que{" "}
-                  {ROLE_LABELS[profile.role].toLowerCase()}. Le nom et le logo
-                  ne sont modifiables que par un propriétaire.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        )}
       </div>
     </>
   );

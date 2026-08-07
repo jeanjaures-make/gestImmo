@@ -4,15 +4,12 @@ import { useDeferredValue, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import {
-  Building2,
-  DoorOpen,
   FileText,
-  FolderClosed,
   Loader2,
+  PackageOpen,
   Receipt,
   Search,
-  Users,
-  Wrench,
+  Wallet,
 } from "lucide-react";
 
 import {
@@ -33,24 +30,18 @@ type SearchHit = {
   href: string;
 };
 
-const ICONS: Record<string, typeof Building2> = {
-  building: Building2,
-  apartment: DoorOpen,
-  tenant: Users,
-  lease: FileText,
-  expense: Receipt,
-  maintenance: Wrench,
-  document: FolderClosed,
+// Les clés viennent de `global_search()` : elles sont au singulier, comme la
+// pièce qu'un résultat désigne.
+const ICONS: Record<string, typeof Receipt> = {
+  receipt: Receipt,
+  cash_voucher: Wallet,
+  delivery_note: PackageOpen,
 };
 
 const ENTITY_LABELS: Record<string, string> = {
-  building: "Immeuble",
-  apartment: "Logement",
-  tenant: "Locataire",
-  lease: "Bail",
-  expense: "Dépense",
-  maintenance: "Intervention",
-  document: "Document",
+  receipt: "Reçu",
+  cash_voucher: "Bon de caisse",
+  delivery_note: "Bon de sortie",
 };
 
 const MIN_LENGTH = 2;
@@ -123,8 +114,8 @@ export function GlobalSearch() {
           <DialogHeader className="sr-only">
             <DialogTitle>Recherche globale</DialogTitle>
             <DialogDescription>
-              Rechercher dans les immeubles, logements, locataires, baux,
-              dépenses, interventions et documents.
+              Rechercher dans les reçus, les bons de caisse et les bons de
+              sortie : par numéro, par nom ou par motif.
             </DialogDescription>
           </DialogHeader>
 
@@ -134,7 +125,7 @@ export function GlobalSearch() {
               autoFocus
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Immeuble, locataire, bail, document…"
+              placeholder="Numéro, nom, motif…"
               className="h-8 border-0 px-0 shadow-none focus-visible:ring-0"
               aria-label="Terme de recherche"
             />

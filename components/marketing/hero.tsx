@@ -57,22 +57,24 @@ export function Hero() {
                 className="inline-flex items-center gap-2 rounded-full border border-[var(--m-line)] bg-[var(--m-surface)] px-3 py-1.5 text-xs font-medium text-[var(--m-ink-soft)]"
               >
                 <ShieldCheck className="size-3.5 text-[var(--m-sage-text)]" />
-                Cloisonnement vérifié à chaque déploiement
+                Cloisonnement vérifié par un script exécutable
               </m.p>
 
               <m.h1
                 {...rise(0.06)}
                 className="font-heading mt-5 text-4xl leading-[1.08] font-semibold tracking-tight text-balance sm:text-5xl lg:text-[3.4rem]"
               >
-                Gérez votre patrimoine immobilier avec simplicité.
+                Reçus, bons de caisse et bons de sortie, à votre en-tête.
               </m.h1>
 
               <m.p
                 {...rise(0.12)}
                 className="mt-5 max-w-xl text-lg leading-relaxed text-[var(--m-ink-soft)] text-pretty"
               >
-                Une plateforme sécurisée pour gérer immeubles, locataires,
-                loyers, interventions et documents depuis un seul espace.
+                CaisseOps émet et imprime les trois pièces de votre comptoir —
+                numérotation continue, montant en toutes lettres, journal
+                d&apos;audit — dans un espace sécurisé réservé à votre
+                entreprise.
               </m.p>
 
               <m.div
@@ -90,7 +92,8 @@ export function Hero() {
                 className="mt-6 flex items-center gap-2 text-sm text-[var(--m-ink-soft)]"
               >
                 <Smartphone className="size-4" />
-                Pensé d&apos;abord pour le téléphone · Sans carte bancaire
+                Pensé d&apos;abord pour le comptoir et le téléphone · Sans
+                carte bancaire
               </m.p>
             </div>
 

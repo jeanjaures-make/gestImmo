@@ -23,7 +23,7 @@ export function Pagination({
   page,
   size,
   total,
-  /** Nom de ce qu'on compte, au pluriel : « échéances », « documents ». */
+  /** Nom de ce qu'on compte, au pluriel : « reçus », « bons de caisse ». */
   unit,
 }: {
   page: number;

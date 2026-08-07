@@ -2,12 +2,12 @@ import { AuthForm, PasswordField } from "@/components/auth-form";
 import { Card, CardContent } from "@/components/ui/kit";
 import { updatePassword } from "../login/actions";
 
-export const metadata = { title: "Votre mot de passe — ImmoOps" };
+export const metadata = { title: "Votre mot de passe — CaisseOps" };
 
 /**
  * Un même écran, deux situations.
  *
- * Un locataire qui ouvre son espace pour la première fois n'a rien à
+ * Un collaborateur qui ouvre son espace pour la première fois n'a rien à
  * « réinitialiser » : lui parler de réinitialisation lui laisse croire
  * qu'il possédait déjà un compte et qu'il l'a perdu. Le paramètre
  * `bienvenue`, posé par le lien d'activation, change le propos sans

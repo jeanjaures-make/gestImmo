@@ -21,13 +21,13 @@ function resolveSiteUrl() {
 }
 
 export const SITE = {
-  name: "ImmoOps",
+  name: "CaisseOps",
   url: resolveSiteUrl(),
-  tagline: "Gérez votre patrimoine immobilier avec simplicité",
+  tagline: "Vos reçus, bons de caisse et bons de sortie, à votre en-tête",
   description:
-    "Immeubles, locataires, loyers, interventions et documents dans un seul espace sécurisé. Portail locataire inclus, pensé d'abord pour le téléphone.",
+    "Émettez vos reçus, bons de caisse et bons de sortie depuis un seul espace sécurisé. Chaque entreprise imprime les siens, sous son logo et ses coordonnées, avec une numérotation continue.",
   locale: "fr_FR",
-  contact: "contact@immoops.fr",
+  contact: "contact@caisseops.com",
 } as const;
 
 /**

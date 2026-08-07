@@ -14,15 +14,15 @@ export type OnboardingState = { error?: string };
 /**
  * Mise en route d'une organisation.
  *
- * On demande davantage que le seul nom de la société : le premier immeuble
- * et, si l'utilisateur le veut, son premier logement. Un tableau de bord
- * vide au premier écran ne montre rien du produit et laisse l'utilisateur
- * devant une page blanche — c'est précisément le moment où l'on abandonne.
- * Trois champs de plus, et il arrive sur son parc.
+ * On demande davantage que le seul nom de la société : le logo et les
+ * coordonnées qui s'impriment en haut de chaque pièce. C'est la raison
+ * d'être du produit — un reçu sans en-tête ne vaut pas mieux qu'un carnet
+ * du commerce. Trois champs de plus, et la première pièce émise porte déjà
+ * l'identité de l'entreprise.
  *
  * Tout ce qui suit la création de l'organisation est facultatif : un échec
- * sur le logo ou l'immeuble ne doit pas priver l'utilisateur d'un compte
- * déjà créé et opérationnel.
+ * sur le logo ou l'en-tête ne doit pas priver l'utilisateur d'un compte
+ * déjà créé et opérationnel. Ces champs se complètent depuis les Réglages.
  */
 const onboardingSchema = z.object({
   name: z
@@ -32,10 +32,9 @@ const onboardingSchema = z.object({
     .max(120),
   firstname: z.string().trim().max(80).optional().default(""),
   lastname: z.string().trim().max(80).optional().default(""),
-  building_name: z.string().trim().max(120).optional().default(""),
-  building_city: z.string().trim().max(120).optional().default(""),
-  building_address: z.string().trim().max(200).optional().default(""),
-  apartment_number: z.string().trim().max(40).optional().default(""),
+  legal_form: z.string().trim().max(40).optional().default(""),
+  phone: z.string().trim().max(60).optional().default(""),
+  address: z.string().trim().max(240).optional().default(""),
 });
 
 type Onboarding = z.infer<typeof onboardingSchema>;
@@ -76,7 +75,7 @@ export async function createOrganization(
 
   const orgId = organizationId as string;
   await attachLogo(formData.get("logo"), orgId);
-  await createFirstBuilding(parsed.data, orgId);
+  await saveLetterhead(parsed.data, orgId);
 
   revalidatePath("/", "layout");
   redirect("/dashboard");
@@ -119,38 +118,35 @@ async function attachLogo(value: FormDataEntryValue | null, orgId: string) {
   }
 }
 
-/** Crée l'immeuble puis, s'il est renseigné, le premier logement. */
-async function createFirstBuilding(data: Onboarding, orgId: string) {
-  if (!data.building_name) return;
+/**
+ * Complète l'en-tête imprimé, si l'utilisateur l'a renseigné.
+ *
+ * Les champs vides ne sont pas écrits : `create_organization()` a laissé
+ * `NULL`, et un `''` prendrait la place d'une valeur inconnue — l'en-tête
+ * imprimerait alors une ligne vide plutôt que d'omettre la ligne.
+ */
+async function saveLetterhead(data: Onboarding, orgId: string) {
+  const patch = Object.fromEntries(
+    (["legal_form", "phone", "address"] as const)
+      .filter((field) => data[field])
+      .map((field) => [field, data[field]]),
+  );
+
+  if (Object.keys(patch).length === 0) return;
 
   try {
     const supabase = await createClient();
-    const { data: building, error } = await supabase
-      .from("buildings")
-      .insert({
-        organization_id: orgId,
-        name: data.building_name,
-        // Adresse et ville restent facultatives ici : on veut trois champs
-        // à l'inscription, pas une fiche complète. Elles se complètent
-        // ensuite depuis l'écran de l'immeuble.
-        address: data.building_address || "À compléter",
-        city: data.building_city || "À compléter",
-      })
-      .select("id")
-      .single();
-
+    const { error } = await supabase
+      .from("organizations")
+      .update(patch)
+      .eq("id", orgId);
     if (error) throw error;
-
-    if (data.apartment_number) {
-      await supabase.from("apartments").insert({
-        organization_id: orgId,
-        building_id: building.id,
-        number: data.apartment_number,
-      });
-    }
   } catch (cause) {
-    // Le compte est créé et utilisable : l'utilisateur ajoutera son
-    // immeuble depuis l'écran dédié.
-    reportError(cause, { scope: "onboarding-building", organizationId: orgId });
+    // Le compte est créé et utilisable : l'utilisateur complétera son
+    // en-tête depuis les Réglages.
+    reportError(cause, {
+      scope: "onboarding-letterhead",
+      organizationId: orgId,
+    });
   }
 }

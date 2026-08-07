@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/kit";
 import { safeNext } from "@/lib/redirect";
 import { signIn } from "./actions";
 
-export const metadata = { title: "Connexion — ImmoOps" };
+export const metadata = { title: "Connexion — CaisseOps" };
 
 export default async function LoginPage({
   searchParams,

@@ -5,9 +5,9 @@
 @custom-variant dark (&:is(.dark *));
 
 /* ---------------------------------------------------------------------
-   Palette ImmoOps — ardoise froide + bleu retenu.
+   Palette CaisseOps — ardoise froide + bleu retenu.
    Volontairement peu saturée : le produit doit avoir l'air d'un outil
-   de pilotage patrimonial, pas d'un tableau de bord marketing.
+   de caisse et de comptabilité, pas d'un tableau de bord marketing.
    --------------------------------------------------------------------- */
 :root {
   --radius: 0.75rem;
@@ -225,6 +225,73 @@
   --m-petrol: #8fb0c6;
   --m-sage: #7fa891;
   --m-sage-text: #9cc0aa;
+}
+
+/* =====================================================================
+   PIÈCES IMPRIMÉES
+   ---------------------------------------------------------------------
+   Un reçu, un bon de caisse et un bon de sortie ne sont pas des écrans :
+   ce sont des feuilles. Elles se composent donc en millimètres, en noir
+   sur blanc, indépendamment du thème choisi dans l'application — un
+   utilisateur en mode sombre imprimerait sinon un rectangle anthracite.
+
+   Le format retenu est l'A5 paysage : c'est le gabarit des carnets à
+   souche que ces documents remplacent, et deux pièces tiennent sur une
+   feuille A4.
+   ===================================================================== */
+.sheet {
+  /* 210 mm moins les marges d'impression déclarées plus bas. */
+  width: 194mm;
+  background: #fff;
+  color: #000;
+  /* Une hauteur minimale, pas fixe : un bon de sortie de vingt lignes
+     doit déborder sur une seconde feuille plutôt que d'être rogné. */
+  min-height: 132mm;
+}
+
+/* Ligne de pointillés à remplir, comme sur le carnet papier.
+   `flex: 1` sur le trait : il occupe exactement la place restante, quelle
+   que soit la longueur de l'intitulé qui le précède. */
+.dotted {
+  flex: 1 1 auto;
+  min-width: 0;
+  border-bottom: 1px dotted #000;
+  /* Décale le trait sous la ligne de base du texte posé dessus. */
+  padding-bottom: 1px;
+}
+
+@media print {
+  @page {
+    size: A5 landscape;
+    margin: 8mm;
+  }
+
+  html,
+  body {
+    background: #fff;
+  }
+
+  .sheet {
+    width: auto;
+    min-height: 0;
+    border: 0;
+    box-shadow: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  /* Une pièce par feuille : sans cela, deux aperçus consécutifs se
+     chevaucheraient au milieu d'une page. */
+  .sheet + .sheet {
+    break-before: page;
+  }
+
+  /* Les navigateurs omettent les aplats par défaut, ce qui effacerait les
+     cadres et l'en-tête. */
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
 }
 
 /* Révélation au défilement, sans JavaScript.

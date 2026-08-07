@@ -1,10 +1,10 @@
 import {
-  Building2,
-  FileText,
+  Banknote,
   Home,
+  PackageMinus,
   Receipt,
-  Wallet,
-  Wrench,
+  ScrollText,
+  Users,
 } from "lucide-react";
 
 import { formatCompactAmount, formatCurrency } from "@/lib/money";
@@ -76,7 +76,7 @@ function WindowChrome({ title }: { title: string }) {
   );
 }
 
-/** Tableau de bord propriétaire, en fenêtre. */
+/** Vue d'ensemble de l'entreprise, en fenêtre. */
 export function DashboardMockup({ className }: { className?: string }) {
   return (
     <div
@@ -86,23 +86,23 @@ export function DashboardMockup({ className }: { className?: string }) {
         className,
       )}
     >
-      <WindowChrome title="immoops.app / vue d'ensemble" />
+      <WindowChrome title="caisseops.app / vue d'ensemble" />
 
       <div className="flex">
         <nav className="hidden w-40 shrink-0 flex-col gap-0.5 border-r border-[var(--m-line)] bg-[var(--m-subtle)] p-3 sm:flex">
           <div className="mb-3 flex items-center gap-2 px-1">
             <span className="flex size-6 items-center justify-center rounded-md bg-[var(--m-deep)] text-white">
-              <Building2 className="size-3" />
+              <Receipt className="size-3" />
             </span>
-            <span className="text-[11px] font-semibold">Patrimoine Vallier</span>
+            <span className="text-[11px] font-semibold">Ets Konan & Fils</span>
           </div>
           {[
             { icon: Home, label: "Vue d'ensemble", active: true },
-            { icon: Building2, label: "Immeubles" },
-            { icon: Wallet, label: "Loyers" },
-            { icon: Wrench, label: "Interventions" },
-            { icon: FileText, label: "Baux" },
-            { icon: Receipt, label: "Dépenses" },
+            { icon: Receipt, label: "Reçus" },
+            { icon: Banknote, label: "Bons de caisse" },
+            { icon: PackageMinus, label: "Bons de sortie" },
+            { icon: ScrollText, label: "Journal d'audit" },
+            { icon: Users, label: "Membres" },
           ].map(({ icon: Icon, label, active }) => (
             <span
               key={label}
@@ -121,17 +121,17 @@ export function DashboardMockup({ className }: { className?: string }) {
 
         <div className="min-w-0 flex-1 p-4">
           <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-            <Stat label="Revenus du mois" value={compact(12400000)} hint="F CFA" />
-            <Stat label="Encaissé" value={compact(11350000)} hint="F CFA" accent />
-            <Stat label="Impayés" value={compact(1050000)} hint="F CFA" />
-            <Stat label="Occupation" value="96 %" hint="24/25 lots" />
+            <Stat label="Entrées du mois" value={compact(8450000)} hint="F CFA" />
+            <Stat label="Sorties du mois" value={compact(5120000)} hint="F CFA" />
+            <Stat label="Solde du mois" value={compact(3330000)} hint="F CFA" accent />
+            <Stat label="Pièces émises" value="131" hint="ce mois-ci" />
           </div>
 
           {/* Histogramme : douze barres, hauteurs fixes pour rester
               identique d'un rendu à l'autre. */}
           <div className="mt-3 rounded-lg border border-[var(--m-line)] bg-[var(--m-surface)] p-3">
             <p className="text-[10px] font-medium text-[var(--m-ink-soft)]">
-              Encaissements sur douze mois
+              Mouvements de caisse sur douze mois
             </p>
             <div className="mt-3 flex h-20 items-end gap-1.5">
               {[62, 70, 58, 74, 80, 68, 86, 78, 90, 84, 94, 88].map((h, i) => (
@@ -149,12 +149,12 @@ export function DashboardMockup({ className }: { className?: string }) {
 
           <div className="mt-3 rounded-lg border border-[var(--m-line)] bg-[var(--m-surface)]">
             {[
-              ["Résidence Vallier · A12", "Loyer encaissé", money(250000)],
-              ["Le Clos des Tilleuls · B04", "Règlement déclaré", money(180000)],
-              ["Résidence Vallier · C21", "Échéance en retard", money(320000)],
-            ].map(([place, state, amount], i) => (
+              ["REC-2026-0148", "Mme Awa Diallo · avance sur commande", money(275000)],
+              ["BC-2026-0062", "Sortie · ravitaillement chantier Koumassi", money(180000)],
+              ["BS-2026-0021", "12 articles · départ chantier Koumassi", "Visa chef de service"],
+            ].map(([numero, detail, aside], i) => (
               <div
-                key={place}
+                key={numero}
                 className={cn(
                   "flex items-center justify-between gap-3 px-3 py-2.5",
                   i > 0 && "border-t border-[var(--m-line)]",
@@ -162,13 +162,13 @@ export function DashboardMockup({ className }: { className?: string }) {
               >
                 <span className="min-w-0">
                   <span className="block truncate text-[11px] font-medium">
-                    {place}
+                    {numero}
                   </span>
                   <span className="block text-[10px] text-[var(--m-ink-soft)]">
-                    {state}
+                    {detail}
                   </span>
                 </span>
-                <span className="text-[11px] font-medium">{amount}</span>
+                <span className="text-[11px] font-medium">{aside}</span>
               </div>
             ))}
           </div>
@@ -208,85 +208,98 @@ export function PhoneFrame({
   );
 }
 
-/** Accueil propriétaire sur téléphone. */
+/** Vue d'ensemble sur téléphone. */
 export function OwnerPhoneScreen() {
   return (
     <div aria-hidden className="px-3 pb-3">
       <p className="px-1 pt-2 text-[11px] font-semibold">Vue d&apos;ensemble</p>
       <div className="mt-2 grid grid-cols-2 gap-2">
-        <Stat label="Revenus" value={compact(12400000)} hint="F CFA" />
-        <Stat label="Encaissé" value={compact(11350000)} hint="F CFA" accent />
-        <Stat label="Impayés" value={compact(1050000)} hint="F CFA" />
-        <Stat label="Occupation" value="96 %" />
+        <Stat label="Entrées" value={compact(8450000)} hint="F CFA" />
+        <Stat label="Sorties" value={compact(5120000)} hint="F CFA" />
+        <Stat label="Solde" value={compact(3330000)} hint="F CFA" accent />
+        <Stat label="Pièces émises" value="131" />
       </div>
 
       <div className="mt-2 rounded-lg border border-[var(--m-sage)]/50 bg-[var(--m-sage)]/10 p-2.5">
-        <p className="text-[10px] font-medium">1 règlement déclaré</p>
+        <p className="text-[10px] font-medium">REC-2026-0148 imprimé</p>
         <p className="text-[9px] text-[var(--m-ink-soft)]">
-          En attente de votre validation
+          275 000 F CFA · Mme Awa Diallo
         </p>
       </div>
 
       <div className="mt-2 space-y-1.5">
-        {["Résidence Vallier", "Le Clos des Tilleuls"].map((name) => (
+        {[
+          ["Reçus", "48 ce mois-ci"],
+          ["Bons de caisse", "62 ce mois-ci"],
+          ["Bons de sortie", "21 ce mois-ci"],
+        ].map(([carnet, count]) => (
           <div
-            key={name}
-            className="rounded-lg border border-[var(--m-line)] bg-[var(--m-surface)] p-2.5"
+            key={carnet}
+            className="flex items-center justify-between rounded-lg border border-[var(--m-line)] bg-[var(--m-surface)] p-2.5"
           >
-            <p className="text-[10px] font-medium">{name}</p>
-            <p className="text-[9px] text-[var(--m-ink-soft)]">
-              12 logements · 100 % occupés
-            </p>
+            <p className="text-[10px] font-medium">{carnet}</p>
+            <p className="text-[9px] text-[var(--m-ink-soft)]">{count}</p>
           </div>
         ))}
       </div>
 
-      <BottomBar items={["Accueil", "Immeubles", "Loyers", "Travaux"]} active={0} />
+      <BottomBar items={["Accueil", "Reçus", "Caisse", "Sorties"]} active={0} />
     </div>
   );
 }
 
-/** Espace locataire sur téléphone. */
-export function TenantPhoneScreen() {
+/** Feuille de reçu sur téléphone, fidèle à l'imprimé. */
+export function ReceiptPhoneScreen() {
   return (
     <div aria-hidden className="px-3 pb-3">
-      <p className="px-1 pt-2 text-[11px] font-semibold">Bonjour Karim</p>
+      <p className="px-1 pt-2 text-[11px] font-semibold">Reçu REC-2026-0148</p>
 
-      <div className="mt-2 rounded-xl bg-[var(--m-deep)] p-3 text-white dark:text-[#101419]">
-        <p className="text-[9px] opacity-80">Loyer de février 2026</p>
-        <p className="font-heading mt-1 text-2xl font-semibold">{money(250000)}</p>
-        <p className="mt-1 text-[9px] opacity-90">À régler avant le 5</p>
+      <div className="mt-2 rounded-lg border border-[var(--m-line)] bg-[var(--m-surface)] p-3">
+        <p className="text-center text-[10px] font-semibold">
+          Ets Konan &amp; Fils — S.A.R.L.
+        </p>
+        <p className="mt-0.5 text-center text-[8px] text-[var(--m-ink-soft)]">
+          Négoce de matériaux · Koumassi
+        </p>
+
+        <div className="mt-2 border-t border-[var(--m-line)] pt-2">
+          <p className="text-[9px] text-[var(--m-ink-soft)]">Reçu de</p>
+          <p className="text-[10px] font-medium">Mme Awa Diallo</p>
+        </div>
+
+        {/* Cadre « bon pour francs », comme sur le papier à en-tête. */}
+        <div className="mt-2 rounded-md border-2 border-[var(--m-ink)]/70 p-2 text-center">
+          <p className="text-[8px] text-[var(--m-ink-soft)]">
+            Bon pour francs
+          </p>
+          <p className="font-heading text-lg font-semibold">{money(275000)}</p>
+        </div>
+
+        <p className="mt-2 text-[8px] leading-snug text-[var(--m-ink-soft)]">
+          Deux cent soixante-quinze mille francs CFA
+        </p>
+
+        <div className="mt-2 space-y-1 border-t border-[var(--m-line)] pt-2 text-[9px]">
+          <p className="flex justify-between">
+            <span className="text-[var(--m-ink-soft)]">Article</span>
+            <span>Ciment 50 kg × 40</span>
+          </p>
+          <p className="flex justify-between">
+            <span className="text-[var(--m-ink-soft)]">Avance</span>
+            <span>{money(200000)}</span>
+          </p>
+          <p className="flex justify-between">
+            <span className="text-[var(--m-ink-soft)]">Reste</span>
+            <span>{money(75000)}</span>
+          </p>
+          <p className="flex justify-between">
+            <span className="text-[var(--m-ink-soft)]">Établi par</span>
+            <span>K. Yao</span>
+          </p>
+        </div>
       </div>
 
-      <div className="mt-2 grid grid-cols-3 gap-1.5">
-        {["Incident", "Documents", "Mon bail"].map((label) => (
-          <div
-            key={label}
-            className="flex min-h-12 flex-col items-center justify-center rounded-lg border border-[var(--m-line)] bg-[var(--m-surface)] text-center text-[8px] font-medium"
-          >
-            {label}
-          </div>
-        ))}
-      </div>
-
-      <div className="mt-2 space-y-1.5">
-        {[
-          ["Janvier 2026", "Encaissé"],
-          ["Décembre 2025", "Encaissé"],
-        ].map(([month, state]) => (
-          <div
-            key={month}
-            className="flex items-center justify-between rounded-lg border border-[var(--m-line)] bg-[var(--m-surface)] p-2.5"
-          >
-            <span className="text-[10px] font-medium">{month}</span>
-            <span className="rounded-full bg-[var(--m-sage)]/15 px-2 py-0.5 text-[8px] font-medium text-[var(--m-sage-text)]">
-              {state}
-            </span>
-          </div>
-        ))}
-      </div>
-
-      <BottomBar items={["Accueil", "Bail", "Loyers", "Docs"]} active={0} />
+      <BottomBar items={["Accueil", "Reçus", "Caisse", "Sorties"]} active={1} />
     </div>
   );
 }

@@ -2,27 +2,24 @@ import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 import {
   AlertTriangle,
-  Building2,
-  CalendarClock,
+  ArrowDownLeft,
+  ArrowUpRight,
   ChevronRight,
-  DoorOpen,
-  Percent,
-  PiggyBank,
+  Landmark,
+  PackageOpen,
   Receipt,
-  TrendingUp,
+  Scale,
+  UserRound,
   Wallet,
-  Wrench,
 } from "lucide-react";
 
 import {
   CashflowChart,
-  MonthlyExpensesChart,
-  MonthlyRevenueChart,
-  PortfolioChart,
+  IssuanceChart,
+  ReceiptsChart,
   type CashflowPoint,
-  type MonthlyExpensePoint,
-  type MonthlyRevenuePoint,
-  type PortfolioPoint,
+  type IssuancePoint,
+  type ReceiptsPoint,
 } from "@/components/charts";
 import { PeriodSelector } from "@/components/period-selector";
 import { readPeriod } from "@/lib/periods";
@@ -33,14 +30,13 @@ import {
   CardTitle,
   EmptyState,
   PageHeader,
-  StatusBadge,
 } from "@/components/ui/kit";
 import { hasRole, requireSession } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { formatCompactCurrency } from "@/lib/money";
-import { formatCurrency, formatDate } from "@/lib/types";
+import { formatCurrency, formatDate, type DocumentKind } from "@/lib/types";
 
-export const metadata = { title: "Vue d'ensemble — ImmoOps" };
+export const metadata = { title: "Vue d'ensemble — CaisseOps" };
 
 /** Les N derniers mois, du plus ancien au plus récent. */
 function lastMonths(count: number) {
@@ -65,20 +61,25 @@ function lastMonths(count: number) {
 const monthKey = (date: string) => date.slice(0, 7);
 
 const ENTITY_LABELS: Record<string, string> = {
-  buildings: "immeuble",
-  apartments: "logement",
-  tenants: "locataire",
-  leases: "bail",
-  rent_payments: "échéance",
-  expenses: "dépense",
-  maintenance: "intervention",
-  documents: "document",
+  receipts: "reçu",
+  cash_vouchers: "bon de caisse",
+  delivery_notes: "bon de sortie",
+  delivery_note_lines: "article de bon de sortie",
+  organizations: "en-tête de l'entreprise",
+  profiles: "membre",
 };
 
 const ACTION_VERBS: Record<string, string> = {
   INSERT: "Création",
   UPDATE: "Modification",
   DELETE: "Suppression",
+};
+
+/** Préfixe imprimé par nature de pièce. Miroir de `document_prefix()`. */
+const KIND_PREFIXES: Record<DocumentKind, string> = {
+  receipt: "REC",
+  cash_voucher: "BC",
+  delivery_note: "BS",
 };
 
 function Stat({
@@ -145,110 +146,77 @@ export default async function DashboardPage({
   const months = lastMonths(period);
   const since = `${months[0].key}-01`;
   const currentMonth = months[months.length - 1].key;
-
-  const today = new Date();
-  const in60Days = new Date();
-  in60Days.setDate(today.getDate() + 60);
-  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  const currentYear = Number(currentMonth.slice(0, 4));
 
   const canSeeActivity = hasRole(profile.role, "owner", "manager");
 
   // Le RLS restreint chaque requête à l'organisation de l'utilisateur.
   const [
-    buildingsResult,
-    apartmentsResult,
-    occupiedResult,
-    vacantResult,
-    leasesResult,
-    paymentsResult,
-    expensesResult,
-    maintenanceResult,
-    urgentResult,
-    expiringResult,
-    ongoingResult,
-    declaredResult,
+    receiptsResult,
+    vouchersResult,
+    notesResult,
+    countersResult,
     activityResult,
   ] = await Promise.all([
     supabase
-      .from("buildings")
-      .select("id, name, city, estimated_value, apartments(count)")
-      .order("name")
+      .from("receipts")
+      .select("id, number, issued_on, payer, amount, balance")
+      .gte("issued_on", since)
+      .order("issued_on", { ascending: false })
+      .order("number", { ascending: false })
       .returns<
         {
           id: string;
-          name: string;
-          city: string;
-          estimated_value: number | null;
-          apartments: { count: number }[];
+          number: string;
+          issued_on: string;
+          payer: string;
+          amount: number;
+          balance: number;
         }[]
       >(),
-    supabase.from("apartments").select("*", { count: "exact", head: true }),
     supabase
-      .from("apartments")
-      .select("*", { count: "exact", head: true })
-      .eq("status", "occupied"),
-    supabase
-      .from("apartments")
-      .select("*", { count: "exact", head: true })
-      .eq("status", "vacant"),
-    supabase
-      .from("leases")
-      .select("rent, charges")
-      .eq("status", "active")
-      .returns<{ rent: number; charges: number }[]>(),
-    supabase
-      .from("rent_payments")
-      .select("month, amount, amount_paid, status")
-      .gte("month", since)
-      .returns<
-        { month: string; amount: number; amount_paid: number; status: string }[]
-      >(),
-    supabase
-      .from("expenses")
-      .select("expense_date, amount")
-      .gte("expense_date", since)
-      .returns<{ expense_date: string; amount: number }[]>(),
-    supabase
-      .from("maintenance")
-      .select("*", { count: "exact", head: true })
-      .in("status", ["open", "in_progress"]),
-    supabase
-      .from("maintenance")
-      .select("*", { count: "exact", head: true })
-      .eq("priority", "urgent")
-      .in("status", ["open", "in_progress"]),
-    supabase
-      .from("leases")
-      .select("id, end_date, tenants(firstname, lastname)")
-      .eq("status", "active")
-      .not("end_date", "is", null)
-      .lte("end_date", iso(in60Days))
-      .gte("end_date", iso(today))
+      .from("cash_vouchers")
+      .select(
+        "id, number, issued_on, direction, amount, counterparty, settlement, deposit_ref, account",
+      )
+      .gte("issued_on", since)
+      .order("issued_on", { ascending: false })
+      .order("number", { ascending: false })
       .returns<
         {
           id: string;
-          end_date: string;
-          tenants: { firstname: string; lastname: string } | null;
+          number: string;
+          issued_on: string;
+          direction: "entree" | "sortie";
+          amount: number;
+          counterparty: string;
+          settlement: "cash" | "depot";
+          deposit_ref: string | null;
+          account: "personal" | "company";
         }[]
       >(),
     supabase
-      .from("maintenance")
-      .select("id, title, priority, apartments(number)")
-      .in("status", ["open", "in_progress"])
-      .order("created_at", { ascending: false })
-      .limit(4)
+      .from("delivery_notes")
+      .select("id, number, issued_on, issuer, service")
+      .gte("issued_on", since)
+      .order("issued_on", { ascending: false })
+      .order("number", { ascending: false })
       .returns<
         {
           id: string;
-          title: string;
-          priority: string;
-          apartments: { number: string } | null;
+          number: string;
+          issued_on: string;
+          issuer: string;
+          service: string;
         }[]
       >(),
+    // Le compteur donne le prochain numéro sans avoir à lire la dernière
+    // pièce émise — et sans se tromper si la dernière a été supprimée.
     supabase
-      .from("payment_declarations")
-      .select("*", { count: "exact", head: true })
-      .eq("status", "pending"),
+      .from("document_counters")
+      .select("kind, year, last_value")
+      .eq("year", currentYear)
+      .returns<{ kind: DocumentKind; year: number; last_value: number }[]>(),
     canSeeActivity
       ? supabase
           .from("audit_logs")
@@ -267,156 +235,177 @@ export default async function DashboardPage({
       : Promise.resolve({ data: [] as never[] }),
   ]);
 
-  const buildings = buildingsResult.data ?? [];
-  const leases = leasesResult.data ?? [];
-  const payments = paymentsResult.data ?? [];
-  const expenses = expensesResult.data ?? [];
-  const expiring = expiringResult.data ?? [];
-  const ongoing = ongoingResult.data ?? [];
+  const receipts = receiptsResult.data ?? [];
+  const vouchers = vouchersResult.data ?? [];
+  const notes = notesResult.data ?? [];
+  const counters = countersResult.data ?? [];
   const activity = activityResult.data ?? [];
 
-  const portfolioValue = buildings.reduce(
-    (sum, b) => sum + Number(b.estimated_value ?? 0),
-    0,
+  const sum = <T,>(rows: T[], amount: (row: T) => number | string) =>
+    rows.reduce((total, row) => total + Number(amount(row)), 0);
+
+  const thisMonth = <T extends { issued_on: string }>(rows: T[]) =>
+    rows.filter((row) => monthKey(row.issued_on) === currentMonth);
+
+  const receiptsThisMonth = thisMonth(receipts);
+  const vouchersThisMonth = thisMonth(vouchers);
+  const notesThisMonth = thisMonth(notes);
+
+  const receivedThisMonth = sum(receiptsThisMonth, (r) => r.amount);
+  const outstanding = sum(receipts, (r) => r.balance);
+
+  const entriesThisMonth = sum(
+    vouchersThisMonth.filter((v) => v.direction === "entree"),
+    (v) => v.amount,
   );
-  const monthlyRevenue = leases.reduce(
-    (sum, l) => sum + Number(l.rent) + Number(l.charges),
-    0,
+  const exitsThisMonth = sum(
+    vouchersThisMonth.filter((v) => v.direction === "sortie"),
+    (v) => v.amount,
+  );
+  const balanceThisMonth = entriesThisMonth - exitsThisMonth;
+
+  const depositsThisMonth = sum(
+    vouchersThisMonth.filter((v) => v.settlement === "depot"),
+    (v) => v.amount,
+  );
+  const personalThisMonth = vouchersThisMonth.filter(
+    (v) => v.account === "personal",
   );
 
-  const apartmentCount = apartmentsResult.count ?? 0;
-  const occupiedCount = occupiedResult.count ?? 0;
-  const occupancy =
-    apartmentCount > 0 ? Math.round((occupiedCount / apartmentCount) * 100) : 0;
-
-  const yieldRate =
-    portfolioValue > 0 ? ((monthlyRevenue * 12) / portfolioValue) * 100 : null;
-
-  const thisMonthPayments = payments.filter(
-    (p) => monthKey(p.month) === currentMonth,
+  // Un dépôt sans référence est une pièce qu'on ne saura pas rapprocher du
+  // relevé : la contrainte de base interdit l'inverse (une référence sans
+  // dépôt), pas cet oubli-là.
+  const depositsWithoutRef = vouchers.filter(
+    (v) => v.settlement === "depot" && !v.deposit_ref,
   );
-  const collectedThisMonth = thisMonthPayments.reduce(
-    (sum, p) => sum + Number(p.amount_paid),
-    0,
-  );
-  const dueThisMonth = thisMonthPayments.reduce(
-    (sum, p) => sum + Number(p.amount),
-    0,
-  );
-  const unpaid = payments
-    .filter((p) => p.status !== "paid" && monthKey(p.month) <= currentMonth)
-    .reduce((sum, p) => sum + (Number(p.amount) - Number(p.amount_paid)), 0);
-  const expensesThisMonth = expenses
-    .filter((e) => monthKey(e.expense_date) === currentMonth)
-    .reduce((sum, e) => sum + Number(e.amount), 0);
-  const netThisMonth = collectedThisMonth - expensesThisMonth;
 
-  const revenueSeries: MonthlyRevenuePoint[] = [];
-  const expenseSeries: MonthlyExpensePoint[] = [];
   const cashflowSeries: CashflowPoint[] = [];
+  const receiptsSeries: ReceiptsPoint[] = [];
+  const issuanceSeries: IssuancePoint[] = [];
 
   for (const { key, label } of months) {
-    const slice = payments.filter((p) => monthKey(p.month) === key);
-    const due = slice.reduce((sum, p) => sum + Number(p.amount), 0);
-    const collected = slice.reduce((sum, p) => sum + Number(p.amount_paid), 0);
-    const spent = expenses
-      .filter((e) => monthKey(e.expense_date) === key)
-      .reduce((sum, e) => sum + Number(e.amount), 0);
+    const monthVouchers = vouchers.filter((v) => monthKey(v.issued_on) === key);
+    const entrees = sum(
+      monthVouchers.filter((v) => v.direction === "entree"),
+      (v) => v.amount,
+    );
+    const sorties = sum(
+      monthVouchers.filter((v) => v.direction === "sortie"),
+      (v) => v.amount,
+    );
+    const monthReceipts = receipts.filter((r) => monthKey(r.issued_on) === key);
 
-    revenueSeries.push({ month: label, due, collected });
-    expenseSeries.push({ month: label, amount: spent });
-    cashflowSeries.push({
+    cashflowSeries.push({ month: label, entrees, sorties, net: entrees - sorties });
+    receiptsSeries.push({
       month: label,
-      collected,
-      expenses: spent,
-      net: collected - spent,
+      amount: sum(monthReceipts, (r) => r.amount),
+    });
+    issuanceSeries.push({
+      month: label,
+      receipts: monthReceipts.length,
+      vouchers: monthVouchers.length,
+      notes: notes.filter((n) => monthKey(n.issued_on) === key).length,
     });
   }
 
-  const portfolioSeries: PortfolioPoint[] = buildings
-    .map((b) => ({ name: b.name, apartments: b.apartments?.[0]?.count ?? 0 }))
-    .sort((a, b) => b.apartments - a.apartments)
-    .slice(0, 8);
+  const hasCashflow = cashflowSeries.some((p) => p.entrees > 0 || p.sorties > 0);
+  const hasReceipts = receiptsSeries.some((p) => p.amount > 0);
+  const hasIssuance = issuanceSeries.some(
+    (p) => p.receipts > 0 || p.vouchers > 0 || p.notes > 0,
+  );
 
-  const hasRevenueData = revenueSeries.some((p) => p.due > 0 || p.collected > 0);
-  const hasExpenseData = expenseSeries.some((p) => p.amount > 0);
+  /** Le numéro que portera la prochaine pièce de cette nature. */
+  const nextNumber = (kind: DocumentKind) => {
+    const counter = counters.find((c) => c.kind === kind);
+    const value = (counter?.last_value ?? 0) + 1;
+    return `${KIND_PREFIXES[kind]}-${currentYear}-${String(value).padStart(4, "0")}`;
+  };
 
-  const urgentCount = urgentResult.count ?? 0;
-  const declaredCount = declaredResult.count ?? 0;
+  const registers = [
+    {
+      href: "/receipts",
+      label: "Reçus",
+      icon: Receipt,
+      count: receiptsThisMonth.length,
+      next: nextNumber("receipt"),
+    },
+    {
+      href: "/cash-vouchers",
+      label: "Bons de caisse",
+      icon: Wallet,
+      count: vouchersThisMonth.length,
+      next: nextNumber("cash_voucher"),
+    },
+    {
+      href: "/delivery-notes",
+      label: "Bons de sortie",
+      icon: PackageOpen,
+      count: notesThisMonth.length,
+      next: nextNumber("delivery_note"),
+    },
+  ];
+
   const alerts = [
-    // En tête : c'est la seule alerte qui attend une décision de l'exploitant
-    // plutôt qu'une simple prise de connaissance.
-    declaredCount > 0 && {
-      href: "/payments",
-      label: `${declaredCount} règlement(s) déclaré(s)`,
-      detail: "Un locataire attend votre validation",
+    outstanding > 0 && {
+      href: "/receipts",
+      label: `${formatCurrency(outstanding)} restant dû`,
+      detail: "Reçus portant un reste à régler",
     },
-    unpaid > 0 && {
-      href: "/payments",
-      label: `${formatCurrency(unpaid)} d'impayés`,
-      detail: "Échéances échues non soldées",
-    },
-    urgentCount > 0 && {
-      href: "/maintenance",
-      label: `${urgentCount} intervention(s) urgente(s)`,
-      detail: "À traiter en priorité",
-    },
-    expiring.length > 0 && {
-      href: "/leases",
-      label: `${expiring.length} bail/baux expirent sous 60 jours`,
-      detail: expiring
+    depositsWithoutRef.length > 0 && {
+      href: "/cash-vouchers",
+      label: `${depositsWithoutRef.length} dépôt(s) sans référence`,
+      detail: depositsWithoutRef
         .slice(0, 2)
-        .map((l) =>
-          l.tenants
-            ? `${l.tenants.firstname} ${l.tenants.lastname} (${formatDate(l.end_date)})`
-            : formatDate(l.end_date),
-        )
+        .map((v) => `${v.number} (${formatDate(v.issued_on)})`)
         .join(" · "),
     },
-    (vacantResult.count ?? 0) > 0 && {
-      href: "/apartments",
-      label: `${vacantResult.count} logement(s) vacant(s)`,
-      detail: "Perte de revenu potentielle",
+    personalThisMonth.length > 0 && {
+      href: "/cash-vouchers",
+      label: `${personalThisMonth.length} mouvement(s) sur compte personnel`,
+      detail: `${formatCurrency(sum(personalThisMonth, (v) => v.amount))} imputés hors compte entreprise`,
     },
   ].filter(Boolean) as { href: string; label: string; detail: string }[];
+
+  const recentReceipts = receipts.slice(0, 4);
 
   return (
     <>
       <PageHeader
         title="Vue d'ensemble"
-        description="L'état de votre patrimoine et de son exploitation."
+        description="Ce qui est entré, ce qui est sorti, et ce qui reste à recouvrer."
       />
 
       {/* Les quatre indicateurs décisifs d'abord : deux colonnes sur
           téléphone, donc visibles sans défiler. */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat
-          label="Revenus mensuels"
-          value={formatCompactCurrency(monthlyRevenue)}
-          exact={formatCurrency(monthlyRevenue)}
-          hint="Baux actifs"
-          icon={Wallet}
+          label="Reçu ce mois"
+          value={formatCompactCurrency(receivedThisMonth)}
+          exact={formatCurrency(receivedThisMonth)}
+          hint={`${receiptsThisMonth.length} reçu(s) émis`}
+          icon={Receipt}
         />
         <Stat
-          label="Encaissé ce mois"
-          value={formatCompactCurrency(collectedThisMonth)}
-          exact={formatCurrency(collectedThisMonth)}
-          hint={`sur ${formatCurrency(dueThisMonth)}`}
-          icon={TrendingUp}
+          label="Entrées de caisse"
+          value={formatCompactCurrency(entriesThisMonth)}
+          exact={formatCurrency(entriesThisMonth)}
+          hint="Bons de caisse du mois"
+          icon={ArrowDownLeft}
         />
         <Stat
-          label="Impayés"
-          value={formatCompactCurrency(unpaid)}
-          exact={formatCurrency(unpaid)}
-          hint="Échéances échues"
-          icon={AlertTriangle}
-          emphasis={unpaid > 0 ? "danger" : undefined}
+          label="Sorties de caisse"
+          value={formatCompactCurrency(exitsThisMonth)}
+          exact={formatCurrency(exitsThisMonth)}
+          hint="Bons de caisse du mois"
+          icon={ArrowUpRight}
         />
         <Stat
-          label="Occupation"
-          value={`${occupancy} %`}
-          hint={`${occupiedCount}/${apartmentCount} logements`}
-          icon={DoorOpen}
+          label="Solde du mois"
+          value={formatCompactCurrency(balanceThisMonth)}
+          exact={formatCurrency(balanceThisMonth)}
+          hint="Entrées − sorties"
+          icon={Scale}
+          emphasis={balanceThisMonth < 0 ? "danger" : "success"}
         />
       </div>
 
@@ -444,120 +433,98 @@ export default async function DashboardPage({
         </section>
       )}
 
-      {buildings.length > 0 && (
-        <section className="mt-5">
-          <div className="mb-2 flex items-center justify-between">
-            <h2 className="text-sm font-semibold">Mes immeubles</h2>
-            <Link
-              href="/buildings"
-              className="flex min-h-11 items-center gap-0.5 text-sm text-primary"
-            >
-              Tout voir
-              <ChevronRight className="size-4" />
+      {/* Les trois carnets, avec le numéro que portera la prochaine pièce :
+          c'est l'information qu'on cherche avant de sortir un carnet à
+          souche, et elle évite d'ouvrir la liste pour la deviner. */}
+      <section className="mt-5">
+        <h2 className="mb-2 text-sm font-semibold">Carnets</h2>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          {registers.map(({ href, label, icon: Icon, count, next }) => (
+            <Link key={href} href={href}>
+              <Card className="h-full gap-0 py-0 active:bg-muted">
+                <CardContent className="flex min-h-20 items-center gap-3 p-4">
+                  <Icon className="size-4 shrink-0 text-muted-foreground" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium">{label}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {count} ce mois · prochain nº{" "}
+                      <span className="tabular-nums">{next}</span>
+                    </p>
+                  </div>
+                  <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+                </CardContent>
+              </Card>
             </Link>
-          </div>
-          {/* Défilement horizontal : le pouce balaie, il ne vise pas. */}
-          <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-1 md:mx-0 md:px-0">
-            {buildings.map((building) => (
-              <Link
-                key={building.id}
-                href="/buildings"
-                className="min-w-44 shrink-0 rounded-xl border bg-card p-4 active:bg-muted"
-              >
-                <Building2 className="size-4 text-muted-foreground" />
-                <p className="mt-2 truncate text-sm font-medium">
-                  {building.name}
-                </p>
-                <p className="truncate text-xs text-muted-foreground">
-                  {building.city} · {building.apartments?.[0]?.count ?? 0}{" "}
-                  logement(s)
-                </p>
-              </Link>
-            ))}
-          </div>
-        </section>
-      )}
+          ))}
+        </div>
+      </section>
 
       <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat
-          label="Cashflow du mois"
-          value={formatCompactCurrency(netThisMonth)}
-          exact={formatCurrency(netThisMonth)}
-          hint="Encaissé − dépenses"
-          icon={PiggyBank}
-          emphasis={netThisMonth < 0 ? "danger" : "success"}
+          label="Reste à recouvrer"
+          value={formatCompactCurrency(outstanding)}
+          exact={formatCurrency(outstanding)}
+          hint={`Sur ${period} mois`}
+          icon={AlertTriangle}
+          emphasis={outstanding > 0 ? "danger" : undefined}
         />
         <Stat
-          label="Patrimoine"
-          value={portfolioValue > 0 ? formatCompactCurrency(portfolioValue) : "—"}
-          exact={portfolioValue > 0 ? formatCurrency(portfolioValue) : undefined}
-          hint={`${buildings.length} immeuble(s)`}
-          icon={Building2}
+          label="Déposé ce mois"
+          value={formatCompactCurrency(depositsThisMonth)}
+          exact={formatCurrency(depositsThisMonth)}
+          hint="Banque ou mobile money"
+          icon={Landmark}
         />
         <Stat
-          label="Rendement brut"
-          value={yieldRate !== null ? `${yieldRate.toFixed(1)} %` : "—"}
-          hint="Loyers annuels / valeur"
-          icon={Percent}
+          label="Compte personnel"
+          value={formatCompactCurrency(sum(personalThisMonth, (v) => v.amount))}
+          exact={formatCurrency(sum(personalThisMonth, (v) => v.amount))}
+          hint={`${personalThisMonth.length} mouvement(s)`}
+          icon={UserRound}
         />
         <Stat
-          label="Échéances du mois"
-          value={String(thisMonthPayments.length)}
-          hint={formatCurrency(dueThisMonth)}
-          icon={CalendarClock}
-        />
-        <Stat
-          label="Dépenses du mois"
-          value={formatCompactCurrency(expensesThisMonth)}
-          exact={formatCurrency(expensesThisMonth)}
-          icon={Receipt}
-        />
-        <Stat
-          label="Interventions"
-          value={String(maintenanceResult.count ?? 0)}
-          hint="Ouvertes ou en cours"
-          icon={Wrench}
-        />
-        <Stat
-          label="Logements vacants"
-          value={String(vacantResult.count ?? 0)}
-          hint="À relouer"
-          icon={DoorOpen}
+          label="Bons de sortie"
+          value={String(notesThisMonth.length)}
+          hint="Émis ce mois"
+          icon={PackageOpen}
         />
       </div>
 
-      {ongoing.length > 0 && (
+      {recentReceipts.length > 0 && (
         <section className="mt-5">
           <div className="mb-2 flex items-center justify-between">
-            <h2 className="text-sm font-semibold">Interventions en cours</h2>
+            <h2 className="text-sm font-semibold">Derniers reçus</h2>
             <Link
-              href="/maintenance"
+              href="/receipts"
               className="flex min-h-11 items-center gap-0.5 text-sm text-primary"
             >
               Tout voir
               <ChevronRight className="size-4" />
             </Link>
           </div>
-          <div className="flex flex-col gap-2">
-            {ongoing.map((item) => (
-              <Card key={item.id} className="gap-0 py-0">
-                <CardContent className="flex min-h-14 items-center gap-3 p-4">
-                  <Wrench className="size-4 shrink-0 text-muted-foreground" />
+          <Card className="gap-0 py-0">
+            <CardContent className="divide-y p-0">
+              {recentReceipts.map((receipt) => (
+                <Link
+                  key={receipt.id}
+                  href={`/receipts/${receipt.id}`}
+                  className="flex min-h-14 items-center gap-3 px-4 py-3 active:bg-muted"
+                >
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{item.title}</p>
+                    <p className="truncate text-sm font-medium">
+                      {receipt.payer}
+                    </p>
                     <p className="text-xs text-muted-foreground">
-                      {item.apartments?.number
-                        ? `Logement ${item.apartments.number}`
-                        : "Parties communes"}
+                      {receipt.number} · {formatDate(receipt.issued_on)}
                     </p>
                   </div>
-                  {item.priority === "urgent" && (
-                    <StatusBadge tone="danger">Urgent</StatusBadge>
-                  )}
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                  <span className="shrink-0 text-sm font-semibold tabular-nums">
+                    {formatCurrency(receipt.amount)}
+                  </span>
+                </Link>
+              ))}
+            </CardContent>
+          </Card>
         </section>
       )}
 
@@ -605,14 +572,14 @@ export default async function DashboardPage({
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
           <Card className="xl:col-span-2">
             <CardHeader>
-              <CardTitle>Cashflow sur {period} mois</CardTitle>
+              <CardTitle>Mouvements de caisse sur {period} mois</CardTitle>
             </CardHeader>
             <CardContent>
-              {hasRevenueData || hasExpenseData ? (
+              {hasCashflow ? (
                 <CashflowChart data={cashflowSeries} />
               ) : (
                 <EmptyState>
-                  Aucun encaissement ni dépense sur la période.
+                  Aucun bon de caisse émis sur la période.
                 </EmptyState>
               )}
             </CardContent>
@@ -620,40 +587,27 @@ export default async function DashboardPage({
 
           <Card>
             <CardHeader>
-              <CardTitle>Loyers appelés et encaissés</CardTitle>
+              <CardTitle>Sommes reçues</CardTitle>
             </CardHeader>
             <CardContent>
-              {hasRevenueData ? (
-                <MonthlyRevenueChart data={revenueSeries} />
+              {hasReceipts ? (
+                <ReceiptsChart data={receiptsSeries} />
               ) : (
-                <EmptyState>Aucune échéance sur la période.</EmptyState>
+                <EmptyState>Aucun reçu émis sur la période.</EmptyState>
               )}
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>Dépenses</CardTitle>
+              <CardTitle>Pièces émises</CardTitle>
             </CardHeader>
             <CardContent>
-              {hasExpenseData ? (
-                <MonthlyExpensesChart data={expenseSeries} />
-              ) : (
-                <EmptyState>Aucune dépense enregistrée.</EmptyState>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card className="xl:col-span-2">
-            <CardHeader>
-              <CardTitle>Répartition du parc</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {portfolioSeries.length ? (
-                <PortfolioChart data={portfolioSeries} />
+              {hasIssuance ? (
+                <IssuanceChart data={issuanceSeries} />
               ) : (
                 <EmptyState>
-                  Créez un immeuble pour voir la répartition de votre parc.
+                  Émettez votre première pièce pour voir votre activité.
                 </EmptyState>
               )}
             </CardContent>

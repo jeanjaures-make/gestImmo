@@ -49,8 +49,7 @@ export async function inviteMember(
 
   // `generateLink` et non `inviteUserByEmail` : le lien est produit sans
   // qu'aucun message ne parte. Le propriétaire le transmet lui-même, ce qui
-  // rend l'invitation possible sans serveur d'envoi — même raison que pour
-  // l'ouverture d'un espace locataire.
+  // rend l'invitation possible sans serveur d'envoi.
   const { data, error } = await admin.auth.admin.generateLink({
     type: "invite",
     email: parsed.data.email,

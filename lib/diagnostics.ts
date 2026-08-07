@@ -92,16 +92,22 @@ function checkKey(raw: string | undefined): Check {
  * Détecte un schéma d'une version antérieure.
  *
  * `organizations` existe depuis la première version : sa présence ne dit
- * rien des ajouts ultérieurs. On sonde donc les tables les plus récentes.
- * Sans elles l'application fonctionne — les requêtes concernées renvoient
- * simplement du vide — mais notifications et déclarations de paiement
- * restent silencieusement inertes, ce qui est pire qu'une panne franche.
+ * rien des ajouts ultérieurs. On sonde donc les tables des trois pièces.
+ * Sur une base restée au schéma de gestion immobilière, elles manquent
+ * toutes les trois : l'application se chargerait, et chaque liste
+ * paraîtrait simplement vide — ce qui est pire qu'une panne franche.
  */
 async function checkSchemaVersion(url: string, key: string): Promise<Check> {
   const probe = createSupabaseClient(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
-  const recent = ["notifications", "payment_declarations", "rate_limits"];
+  const recent = [
+    "receipts",
+    "cash_vouchers",
+    "delivery_notes",
+    "document_counters",
+    "rate_limits",
+  ];
 
   const missing: string[] = [];
   for (const table of recent) {

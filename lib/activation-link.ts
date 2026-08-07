@@ -10,7 +10,7 @@ import { headers } from "next/headers";
  * le domaine Supabase, qui vérifie le jeton puis rebondit vers nous en
  * plaçant la session dans le *fragment* de l'URL (`#access_token=…`). Or
  * un fragment n'est jamais transmis au serveur : notre route d'atterrissage
- * ne verrait rien passer, et le locataire retomberait sur l'écran de
+ * ne verrait rien passer, et l'invité retomberait sur l'écran de
  * connexion sans que rien n'explique pourquoi.
  *
  * Le jeton haché, lui, se vérifie côté serveur — la session s'ouvre dans

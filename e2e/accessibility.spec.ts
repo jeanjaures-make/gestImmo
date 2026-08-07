@@ -82,7 +82,7 @@ async function seed(table: string, row: Record<string, unknown>) {
 }
 
 test.beforeAll(async ({ browser }) => {
-  // Le parc est monté par l'API : ce test-ci porte sur le rendu, pas sur
+  // Le carnet est monté par l'API : ce test-ci porte sur le rendu, pas sur
   // les parcours de création, déjà couverts par `journey.spec.ts`.
   const { data: user, error } = await admin().auth.admin.createUser({
     email: ownerEmail,
@@ -94,6 +94,11 @@ test.beforeAll(async ({ browser }) => {
   const org = await seed("organizations", {
     name: orgName,
     slug: `a11y-${Date.now()}`,
+    legal_form: "S.A.R.L.",
+    trade_name: "Société de travaux industriels et de prestation",
+    activities: ["Chaudronnerie", "Tuyauterie"],
+    address: "Zone industrielle de Vridi, Abidjan",
+    phone: "+225 27 21 00 00 00",
   });
 
   await seed("profiles", {
@@ -105,82 +110,73 @@ test.beforeAll(async ({ browser }) => {
     role: "owner",
   });
 
-  const building = await seed("buildings", {
-    organization_id: org,
-    name: "Résidence Vallier",
-    address: "12 rue des Manguiers",
-    city: "Dakar",
-  });
-
-  const apartment = await seed("apartments", {
-    organization_id: org,
-    building_id: building,
-    number: "A101",
-    floor: "1",
-    surface: 68,
-    type: "T3",
-  });
-
-  const tenant = await seed("tenants", {
-    organization_id: org,
-    firstname: "Karim",
-    lastname: "Benali",
-    email: testEmail("a11y-loc"),
-    phone: "+221770000000",
-  });
-
-  const lease = await seed("leases", {
-    organization_id: org,
-    tenant_id: tenant,
-    apartment_id: apartment,
-    rent: 275000,
-    charges: 15000,
-    deposit: 550000,
-    start_date: "2026-01-01",
-  });
-
-  // Une échéance due et une réglée : les deux badges de statut, donc les
-  // deux jeux de couleurs à contrôler.
+  // Un reçu et deux bons de caisse de sens opposés : les badges Entrée et
+  // Sortie sont deux jeux de couleurs à contrôler.
   // Les deux lignes portent les mêmes clés : dans un lot, PostgREST aligne
   // les colonnes sur la première et pose NULL pour les absentes, au lieu de
   // laisser jouer les valeurs par défaut.
-  const { error: paymentsError } = await admin().from("rent_payments").insert([
-    {
-      organization_id: org,
-      lease_id: lease,
-      month: "2026-01-01",
-      amount: 290000,
-      status: "pending",
-      amount_paid: 0,
-      payment_date: null,
-    },
-    {
-      organization_id: org,
-      lease_id: lease,
-      month: "2026-02-01",
-      amount: 290000,
-      status: "paid",
-      amount_paid: 290000,
-      payment_date: "2026-02-03",
-    },
-  ]);
-  if (paymentsError) throw new Error(`rent_payments : ${paymentsError.message}`);
-
-  await seed("expenses", {
+  await seed("receipts", {
     organization_id: org,
-    building_id: building,
-    label: "Réfection de la toiture",
-    category: "works",
-    amount: 1250000,
-    expense_date: "2026-01-15",
+    issued_on: "2026-01-15",
+    payer: "Karim Benali",
+    amount: 275000,
+    amount_in_words: "Deux cent soixante-quinze mille francs CFA",
+    articles: "Fourniture et pose de garde-corps",
+    advance: 75000,
+    balance: 200000,
+    issued_by: "Awa Diallo",
   });
 
-  await seed("maintenance", {
+  const { error: vouchersError } = await admin().from("cash_vouchers").insert([
+    {
+      organization_id: org,
+      issued_on: "2026-01-16",
+      direction: "entree",
+      counterparty: "Karim Benali",
+      amount: 120000,
+      amount_in_words: "Cent vingt mille francs CFA",
+      reason: "Règlement d'acompte",
+      advance: 0,
+      balance: 0,
+      ordered_by: "Direction générale",
+      settlement: "depot",
+      deposit_ref: "Bordereau nº 4471",
+      account: "company",
+    },
+    {
+      organization_id: org,
+      issued_on: "2026-01-17",
+      direction: "sortie",
+      counterparty: "Awa Diallo",
+      amount: 45000,
+      amount_in_words: "Quarante-cinq mille francs CFA",
+      reason: "Achat de consommables de soudure",
+      advance: 0,
+      balance: 0,
+      ordered_by: "Direction générale",
+      settlement: "cash",
+      deposit_ref: null,
+      account: "company",
+    },
+  ]);
+  if (vouchersError) throw new Error(`cash_vouchers : ${vouchersError.message}`);
+
+  const note = await seed("delivery_notes", {
     organization_id: org,
-    building_id: building,
-    apartment_id: apartment,
-    title: "Fuite sous l'évier",
-    description: "Signalée par le locataire.",
+    issued_on: "2026-01-18",
+    issuer: "Awa Diallo",
+    service: "Magasin",
+    nota: "Exemplaire chauffeur",
+  });
+
+  await seed("delivery_note_lines", {
+    organization_id: org,
+    delivery_note_id: note,
+    position: 0,
+    designation: "Tôles galvanisées",
+    quantity: "12",
+    destination: "Chantier Koumassi",
+    observations: "Palettes consignées",
   });
 
   await saveSession(browser);
@@ -266,17 +262,11 @@ test.describe("back-office", () => {
   test.use({ storageState: SESSION });
 
   for (const [label, path] of [
-  ["Vue d'ensemble", "/dashboard"],
-  ["Immeubles", "/buildings"],
-  ["Logements", "/apartments"],
-  ["Locataires", "/tenants"],
-  ["Baux", "/leases"],
-  ["Paiements", "/payments"],
-  ["Dépenses", "/expenses"],
-  ["Interventions", "/maintenance"],
-  ["Documents", "/documents"],
-  ["Notifications", "/notifications"],
-  ["Journal d'audit", "/audit"],
+    ["Vue d'ensemble", "/dashboard"],
+    ["Reçus", "/receipts"],
+    ["Bons de caisse", "/cash-vouchers"],
+    ["Bons de sortie", "/delivery-notes"],
+    ["Journal d'audit", "/audit"],
     ["Équipe", "/team"],
     ["Réglages", "/settings"],
   ] as const) {

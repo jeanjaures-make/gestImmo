@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Building2, Menu, X } from "lucide-react";
+import { Menu, Receipt, X } from "lucide-react";
 
 import { PrimaryLink, SecondaryLink } from "@/components/marketing/ui";
+import { SITE } from "@/lib/site";
 import { cn } from "@/lib/utils";
 
 const LINKS = [
@@ -58,10 +59,10 @@ export function MarketingHeader() {
           className="flex items-center gap-2.5 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--m-deep)]"
         >
           <span className="flex size-8 items-center justify-center rounded-lg bg-[var(--m-deep)] text-white dark:text-[#101419]">
-            <Building2 className="size-4" />
+            <Receipt className="size-4" />
           </span>
           <span className="font-heading text-base font-semibold tracking-tight">
-            ImmoOps
+            {SITE.name}
           </span>
         </Link>
 

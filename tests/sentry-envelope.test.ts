@@ -94,7 +94,7 @@ describe("buildEnvelope", () => {
   it("convertit la pile, de la trame la plus ancienne à la plus récente", () => {
     const stack = [
       "Error: Boom",
-      "    at grantAccess (/app/lib/portal.ts:42:11)",
+      "    at grantAccess (/app/lib/auth.ts:42:11)",
       "    at handler (/app/route.ts:7:3)",
     ].join("\n");
 
@@ -106,7 +106,7 @@ describe("buildEnvelope", () => {
     expect(frames[0].function).toBe("handler");
     expect(frames[1]).toMatchObject({
       function: "grantAccess",
-      filename: "/app/lib/portal.ts",
+      filename: "/app/lib/auth.ts",
       lineno: 42,
       colno: 11,
     });

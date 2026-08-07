@@ -2,9 +2,9 @@
  * Pagination des listes.
  *
  * Avant, chaque écran posait un `.limit(200)` : au-delà, les lignes les
- * plus anciennes disparaissaient sans que rien ne le signale. Sur des
- * loyers, une donnée absente et silencieuse est pire qu'une erreur — elle
- * se lit comme une absence de dette.
+ * plus anciennes disparaissaient sans que rien ne le signale. Sur un carnet
+ * de pièces, une donnée absente et silencieuse est pire qu'une erreur —
+ * elle se lit comme une absence de recette.
  *
  * Le numéro de page vit dans l'URL et non dans un état client : la page
  * reste partageable, le bouton Retour du navigateur fonctionne, et le

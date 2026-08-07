@@ -42,7 +42,7 @@ describe("toCsv", () => {
 
   /**
    * Le cas qui compte vraiment : Excel exécute une cellule commençant par
-   * `=`, `+`, `-` ou `@`. Un nom de locataire est une donnée saisie par un
+   * `=`, `+`, `-` ou `@`. Un nom de payeur est une donnée saisie par un
    * tiers ; sans neutralisation, l'export devient un vecteur d'exécution sur
    * le poste du gestionnaire qui l'ouvre.
    */
@@ -87,23 +87,23 @@ describe("csvFilename", () => {
   const day = new Date().toISOString().slice(0, 10);
 
   it("compose le nom de l'organisation, le jeu et la date", () => {
-    expect(csvFilename("paiements", "Gestion Vallier")).toBe(
-      `gestion-vallier-paiements-${day}.csv`,
+    expect(csvFilename("recus", "Travaux Vallier")).toBe(
+      `travaux-vallier-recus-${day}.csv`,
     );
   });
 
   it("retire les accents et la ponctuation", () => {
-    expect(csvFilename("baux", "Résidence Élysée & Cie")).toBe(
-      `residence-elysee-cie-baux-${day}.csv`,
+    expect(csvFilename("bons-de-caisse", "Société Élysée & Cie")).toBe(
+      `societe-elysee-cie-bons-de-caisse-${day}.csv`,
     );
   });
 
   it("retombe sur un nom neutre si l'organisation ne donne rien", () => {
-    expect(csvFilename("baux", "…")).toBe(`immoops-baux-${day}.csv`);
+    expect(csvFilename("recus", "…")).toBe(`caisseops-recus-${day}.csv`);
   });
 
   it("tronque un nom démesuré plutôt que de produire un fichier illisible", () => {
-    const name = csvFilename("baux", "A".repeat(120));
+    const name = csvFilename("recus", "A".repeat(120));
     expect(name.length).toBeLessThan(70);
   });
 });

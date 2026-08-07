@@ -37,7 +37,7 @@ const HÉBERGEMENT: Block[] = [
   {
     kind: "paragraph",
     text:
-      "Les données sont enregistrées dans une base PostgreSQL gérée par Supabase, et les fichiers déposés (baux, pièces d'identité, factures) dans son service de stockage. L'application est servie par Vercel. Ces deux prestataires agissent comme sous-traitants au sens du RGPD.",
+      "Les données sont enregistrées dans une base PostgreSQL gérée par Supabase, et le seul fichier déposable — le logo d'en-tête de l'organisation — dans son service de stockage. L'application est servie par Vercel. Ces deux prestataires agissent comme sous-traitants au sens du RGPD.",
   },
   {
     kind: "todo",
@@ -110,12 +110,12 @@ export const DOCUMENTS: Record<string, LegalDocument> = {
           {
             kind: "paragraph",
             text:
-              "La plateforme traite les données de deux publics distincts, et cette distinction commande tout le reste. D'un côté les utilisateurs professionnels — propriétaires, gestionnaires, comptables — qui ouvrent un compte. De l'autre les locataires, dont les données sont saisies par leur gestionnaire et qui n'ont pas toujours souscrit eux-mêmes.",
+              "La plateforme traite les données de deux publics distincts, et cette distinction commande tout le reste. D'un côté les utilisateurs professionnels — propriétaires, gestionnaires, caissiers — qui ouvrent un compte. De l'autre les tiers nommés sur les pièces : payeurs, bénéficiaires et émetteurs, dont les noms sont saisis par l'organisation et qui n'ont pas souscrit eux-mêmes.",
           },
           {
             kind: "paragraph",
             text:
-              "Pour les données des locataires, l'organisation cliente est responsable de traitement et l'éditeur agit comme sous-traitant. Il appartient donc à chaque organisation d'informer ses locataires et de recueillir, lorsque c'est nécessaire, leur consentement.",
+              "Pour les données de ces tiers, l'organisation cliente est responsable de traitement et l'éditeur agit comme sous-traitant. Il appartient donc à chaque organisation d'informer les personnes qu'elle nomme sur ses pièces et de recueillir, lorsque c'est nécessaire, leur consentement.",
           },
         ],
       },
@@ -137,23 +137,20 @@ export const DOCUMENTS: Record<string, LegalDocument> = {
           },
           {
             kind: "paragraph",
-            text: "Pour un locataire :",
+            text: "Pour les tiers nommés sur les pièces :",
           },
           {
             kind: "list",
             items: [
-              "Prénom, nom, téléphone, adresse électronique",
-              "Numéro de pièce d'identité, lorsque le gestionnaire le renseigne",
-              "Bail : logement, loyer, charges, dépôt de garantie, dates",
-              "Échéances de loyer, règlements déclarés et encaissements",
-              "Interventions signalées sur le logement",
-              "Documents déposés par le gestionnaire ou par le locataire",
+              "Nom du payeur sur les reçus, et montants encaissés le concernant",
+              "Nom du bénéficiaire sur les bons de caisse, motifs et références de dépôt",
+              "Nom de l'émetteur sur les bons de sortie, et marchandises associées",
             ],
           },
           {
             kind: "paragraph",
             text:
-              "Aucune donnée bancaire n'est enregistrée : la plateforme ne perçoit aucun paiement et ne se raccorde à aucun prestataire de paiement. Un règlement est déclaré puis validé par un humain.",
+              "Aucune donnée bancaire n'est enregistrée : la plateforme ne perçoit aucun paiement et ne se raccorde à aucun prestataire de paiement. Elle enregistre et imprime des pièces, c'est tout — un dépôt n'y figure que par sa référence de bordereau, jamais par un numéro de compte.",
           },
         ],
       },
@@ -163,7 +160,7 @@ export const DOCUMENTS: Record<string, LegalDocument> = {
           {
             kind: "list",
             items: [
-              "Fourniture du service de gestion locative — exécution du contrat conclu avec l'organisation cliente",
+              "Fourniture du service d'émission de reçus, bons de caisse et bons de sortie — exécution du contrat conclu avec l'organisation cliente",
               "Authentification et sécurité des comptes, dont le journal des connexions — intérêt légitime de l'éditeur à prévenir les accès frauduleux",
               "Journal d'audit des modifications — intérêt légitime, et obligation de traçabilité de l'organisation cliente",
               "Diagnostic des incidents techniques — intérêt légitime au bon fonctionnement du service",
@@ -182,7 +179,7 @@ export const DOCUMENTS: Record<string, LegalDocument> = {
           {
             kind: "paragraph",
             text:
-              "Chaque organisation ne peut accéder qu'à ses propres données. Ce cloisonnement n'est pas seulement appliqué par l'interface mais par la base de données elle-même, au moyen de politiques de sécurité au niveau des lignes. Un locataire disposant d'un accès ne voit que son bail, ses échéances, ses documents et ses interventions — jamais ceux d'un autre, ni les dépenses de l'organisation, ni le journal d'audit.",
+              "Chaque organisation ne peut accéder qu'à ses propres données. Ce cloisonnement n'est pas seulement appliqué par l'interface mais par la base de données elle-même, au moyen de politiques de sécurité au niveau des lignes. Un membre ne voit que les pièces de son organisation ; la suppression d'une pièce est réservée aux propriétaires et gestionnaires, et le journal d'audit à ces deux rôles.",
           },
           {
             kind: "paragraph",
@@ -197,7 +194,7 @@ export const DOCUMENTS: Record<string, LegalDocument> = {
           {
             kind: "paragraph",
             text:
-              "Les données ne sont accessibles qu'aux membres de l'organisation cliente, selon leur rôle, et au locataire concerné pour ce qui lui appartient. L'éditeur n'y accède pas dans le cours normal de l'exploitation. Un accès technique ponctuel, à des fins de diagnostic et à la demande du client, reste possible.",
+              "Les données ne sont accessibles qu'aux membres de l'organisation cliente, selon leur rôle. L'éditeur n'y accède pas dans le cours normal de l'exploitation. Un accès technique ponctuel, à des fins de diagnostic et à la demande du client, reste possible.",
           },
           {
             kind: "paragraph",
@@ -212,7 +209,7 @@ export const DOCUMENTS: Record<string, LegalDocument> = {
           {
             kind: "list",
             items: [
-              "Données de gestion locative : pendant toute la durée du contrat avec l'organisation cliente",
+              "Pièces émises et données de l'organisation : pendant toute la durée du contrat avec l'organisation cliente",
               "Journal des connexions : douze mois",
               "Journal d'audit des modifications : durée du contrat, puis archivage selon les obligations comptables de l'organisation",
               "Après résiliation : suppression définitive à l'issue du délai de réversibilité prévu aux conditions générales",
@@ -237,7 +234,7 @@ export const DOCUMENTS: Record<string, LegalDocument> = {
             items: [
               "Communications chiffrées de bout en bout (HTTPS)",
               "Mots de passe stockés sous forme de condensat par le fournisseur d'authentification, jamais en clair",
-              "Documents déposés dans un espace privé ; leur téléchargement passe par un lien signé valable soixante secondes",
+              "Numérotation des pièces attribuée sous verrou par la base, sans trou ni doublon, et gelée après émission",
               "Cloisonnement appliqué par la base de données, indépendamment de l'interface",
               "Journalisation des accès et des modifications",
             ],
@@ -250,7 +247,7 @@ export const DOCUMENTS: Record<string, LegalDocument> = {
           {
             kind: "paragraph",
             text:
-              "Toute personne dispose d'un droit d'accès, de rectification, d'effacement, de limitation, d'opposition et de portabilité sur les données la concernant. Un locataire adresse sa demande à son gestionnaire, responsable de traitement ; l'éditeur l'assiste pour y répondre.",
+              "Toute personne dispose d'un droit d'accès, de rectification, d'effacement, de limitation, d'opposition et de portabilité sur les données la concernant. Un tiers nommé sur une pièce adresse sa demande à l'organisation qui l'a émise, responsable de traitement ; l'éditeur l'assiste pour y répondre.",
           },
           {
             kind: "paragraph",
@@ -287,12 +284,12 @@ export const DOCUMENTS: Record<string, LegalDocument> = {
           {
             kind: "paragraph",
             text:
-              "La plateforme permet de gérer un parc immobilier locatif : immeubles, logements, locataires, baux, échéances de loyer, dépenses, interventions et documents. Elle met également à disposition des locataires un espace où consulter leur bail, leurs quittances et leurs interventions, et déclarer leurs règlements.",
+              "La plateforme permet à une entreprise d'émettre et d'imprimer ses pièces de caisse — reçus, bons de caisse et bons de sortie — à son propre en-tête, avec une numérotation continue par nature de pièce. Elle tient les listes correspondantes, le journal d'audit et les exports comptables. Seul le personnel de l'entreprise y a accès ; les clients, fournisseurs ou chauffeurs nommés sur les pièces ne disposent d'aucun espace en ligne.",
           },
           {
             kind: "paragraph",
             text:
-              "La plateforme n'encaisse aucun paiement. Une déclaration de règlement par un locataire ne vaut pas encaissement tant qu'un gestionnaire ne l'a pas validée. L'éditeur n'intervient à aucun moment dans la relation contractuelle entre un bailleur et son locataire, et ne fournit ni conseil juridique, ni conseil fiscal.",
+              "La plateforme n'encaisse aucun paiement : elle enregistre des mouvements que l'entreprise déclare avoir constatés. L'éditeur n'intervient à aucun moment dans les relations commerciales de l'organisation avec ses clients ou fournisseurs, et ne fournit ni conseil juridique, ni conseil fiscal. La valeur probante d'une pièce émise relève de la législation applicable à l'organisation qui l'émet.",
           },
         ],
       },
@@ -302,12 +299,12 @@ export const DOCUMENTS: Record<string, LegalDocument> = {
           {
             kind: "paragraph",
             text:
-              "Chaque compte est nominatif. Son titulaire est responsable de la confidentialité de son mot de passe et des actions accomplies depuis son compte. Les rôles — propriétaire, gestionnaire, comptable, lecteur — déterminent ce que chacun peut consulter et modifier ; leur attribution relève du propriétaire de l'organisation.",
+              "Chaque compte est nominatif. Son titulaire est responsable de la confidentialité de son mot de passe et des actions accomplies depuis son compte. Les rôles — propriétaire, gestionnaire, caissier, lecture seule — déterminent ce que chacun peut consulter et modifier ; leur attribution relève du propriétaire de l'organisation.",
           },
           {
             kind: "paragraph",
             text:
-              "L'accès d'un locataire est ouvert par son gestionnaire au moyen d'un lien d'activation, que celui-ci lui transmet par le canal de son choix. Ce lien vaut identifiant : il ne doit être communiqué qu'à son destinataire.",
+              "L'accès d'un collaborateur est ouvert par le propriétaire au moyen d'un lien d'activation, que celui-ci lui transmet par le canal de son choix. Ce lien vaut identifiant : il ne doit être communiqué qu'à son destinataire.",
           },
         ],
       },
@@ -371,7 +368,7 @@ export const DOCUMENTS: Record<string, LegalDocument> = {
           {
             kind: "paragraph",
             text:
-              "L'utilisateur peut cesser d'utiliser le service à tout moment. Avant toute suppression, il lui appartient d'exporter ses données depuis l'application ; les listes principales s'exportent aux formats ouverts, et les documents déposés restent téléchargeables.",
+              "L'utilisateur peut cesser d'utiliser le service à tout moment. Avant toute suppression, il lui appartient d'exporter ses données depuis l'application ; les trois carnets s'exportent aux formats ouverts (CSV), et chaque pièce reste imprimable.",
           },
           {
             kind: "paragraph",

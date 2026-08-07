@@ -172,12 +172,12 @@ export function OnboardingForm() {
       <Step
         index={1}
         title="Votre organisation"
-        description="Le nom que verront vos locataires sur leurs quittances."
+        description="Le nom qui s'imprimera en haut de chacune de vos pièces."
       >
         <Field label="Nom de l'organisation">
           <Input
             name="name"
-            placeholder="Patrimoine Vallier"
+            placeholder="Sotrapi"
             autoComplete="organization"
             required
             autoFocus
@@ -214,28 +214,35 @@ export function OnboardingForm() {
 
       <Step
         index={3}
-        title="Votre premier bien"
-        description="Facultatif, mais votre tableau de bord ne sera pas vide."
+        title="Votre en-tête imprimé"
+        description="Facultatif, mais votre premier reçu portera déjà vos coordonnées."
       >
-        <Field
-          label="Nom de l'immeuble"
-          hint="Une villa ou un appartement isolé conviennent aussi."
-        >
+        <div className="grid grid-cols-2 gap-4">
+          <Field
+            label="Forme juridique"
+            hint="Accolée au nom sur le papier."
+          >
+            <Input name="legal_form" placeholder="S.A.R.L." className="h-11" />
+          </Field>
+          <Field label="Téléphone">
+            <Input
+              name="phone"
+              type="tel"
+              placeholder="+225 27 21 00 00 00"
+              autoComplete="tel"
+              className="h-11"
+            />
+          </Field>
+        </div>
+
+        <Field label="Adresse">
           <Input
-            name="building_name"
-            placeholder="Résidence Vallier"
+            name="address"
+            placeholder="Zone industrielle de Vridi, Abidjan"
+            autoComplete="street-address"
             className="h-11"
           />
         </Field>
-
-        <div className="grid grid-cols-2 gap-4">
-          <Field label="Ville">
-            <Input name="building_city" placeholder="Dakar" className="h-11" />
-          </Field>
-          <Field label="Premier logement" hint="Numéro ou nom du lot.">
-            <Input name="apartment_number" placeholder="A12" className="h-11" />
-          </Field>
-        </div>
       </Step>
 
       <ErrorText>{state.error}</ErrorText>

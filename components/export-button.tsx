@@ -18,7 +18,7 @@ export function ExportButton({
   dataset,
   label = "Exporter en CSV",
 }: {
-  dataset: "paiements" | "depenses" | "locataires" | "baux";
+  dataset: "recus" | "bons-de-caisse" | "bons-de-sortie";
   label?: string;
 }) {
   return (

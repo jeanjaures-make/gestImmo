@@ -2,164 +2,92 @@ import type { Tone } from "@/components/ui/kit";
 
 // ---------------------------------------------------------------- enums
 export type UserRole = "owner" | "manager" | "accountant" | "viewer";
-export type ApartmentStatus = "vacant" | "occupied" | "maintenance";
-export type LeaseStatus = "draft" | "active" | "ended" | "terminated";
-export type PaymentStatus = "pending" | "paid" | "partial" | "late";
-export type MaintenancePriority = "low" | "medium" | "high" | "urgent";
-export type MaintenanceStatus = "open" | "in_progress" | "resolved" | "cancelled";
-export type ExpenseCategory =
-  | "maintenance"
-  | "taxes"
-  | "insurance"
-  | "utilities"
-  | "management"
-  | "works"
-  | "other";
-export type DocumentOwnerType =
-  | "organization"
-  | "building"
-  | "apartment"
-  | "tenant"
-  | "lease"
-  | "expense";
-export type NotificationKind =
-  | "incident_declared"
-  | "incident_updated"
-  | "payment_recorded"
-  | "payment_declared"
-  | "payment_declaration_reviewed"
-  | "lease_created";
-export type PaymentDeclarationStatus = "pending" | "accepted" | "rejected";
+
+/** Sens du mouvement d'un bon de caisse. */
+export type CashDirection = "entree" | "sortie";
+/** Espèces en main, ou dépôt (banque, mobile money). */
+export type CashSettlement = "cash" | "depot";
+/** Imputation : la personne, ou l'entreprise. */
+export type CashAccount = "personal" | "company";
+/** Les trois pièces émises par le produit. */
+export type DocumentKind = "receipt" | "cash_voucher" | "delivery_note";
 
 // Les valeurs sont en anglais en base (enums PostgreSQL), l'affichage en
 // français : la traduction vit ici et nulle part ailleurs.
 export const ROLE_LABELS: Record<UserRole, string> = {
   owner: "Propriétaire",
   manager: "Gestionnaire",
-  accountant: "Comptable",
+  accountant: "Caissier",
   viewer: "Lecture seule",
 };
 
 export const ROLE_DESCRIPTIONS: Record<UserRole, string> = {
-  owner: "Accès total, y compris la facturation et les membres.",
-  manager: "Gestion quotidienne du parc, des baux et des interventions.",
-  accountant: "Lecture complète et saisie des paiements.",
-  viewer: "Consultation seule.",
+  owner: "Accès total, y compris l'en-tête de l'entreprise et les membres.",
+  manager: "Émet et corrige toutes les pièces, peut en supprimer.",
+  accountant: "Émet et corrige les pièces, sans pouvoir en supprimer.",
+  viewer: "Consultation et impression seules.",
 };
 
-export const APARTMENT_STATUS_LABELS: Record<ApartmentStatus, string> = {
-  vacant: "Libre",
-  occupied: "Occupé",
-  maintenance: "Travaux",
+export const CASH_DIRECTION_LABELS: Record<CashDirection, string> = {
+  entree: "Entrée",
+  sortie: "Sortie",
 };
 
-export const APARTMENT_STATUS_TONES: Record<ApartmentStatus, Tone> = {
-  vacant: "neutral",
-  occupied: "success",
-  maintenance: "warning",
+export const CASH_DIRECTION_TONES: Record<CashDirection, Tone> = {
+  entree: "success",
+  sortie: "warning",
 };
 
-export const LEASE_STATUS_LABELS: Record<LeaseStatus, string> = {
-  draft: "Brouillon",
-  active: "En cours",
-  ended: "Terminé",
-  terminated: "Résilié",
+export const CASH_SETTLEMENT_LABELS: Record<CashSettlement, string> = {
+  cash: "Cash",
+  depot: "Dépôt",
 };
 
-export const LEASE_STATUS_TONES: Record<LeaseStatus, Tone> = {
-  draft: "neutral",
-  active: "success",
-  ended: "neutral",
-  terminated: "danger",
+export const CASH_ACCOUNT_LABELS: Record<CashAccount, string> = {
+  personal: "Compte personnel",
+  company: "Compte entreprise",
 };
 
-export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
-  pending: "À encaisser",
-  paid: "Encaissé",
-  partial: "Partiel",
-  late: "En retard",
+export const DOCUMENT_KIND_LABELS: Record<DocumentKind, string> = {
+  receipt: "Reçu",
+  cash_voucher: "Bon de caisse",
+  delivery_note: "Bon de sortie",
 };
-
-export const PAYMENT_STATUS_TONES: Record<PaymentStatus, Tone> = {
-  pending: "info",
-  paid: "success",
-  partial: "warning",
-  late: "danger",
-};
-
-export const EXPENSE_CATEGORY_LABELS: Record<ExpenseCategory, string> = {
-  maintenance: "Entretien",
-  taxes: "Taxes",
-  insurance: "Assurance",
-  utilities: "Fluides",
-  management: "Gestion",
-  works: "Travaux",
-  other: "Autre",
-};
-
-export const MAINTENANCE_PRIORITY_LABELS: Record<MaintenancePriority, string> = {
-  low: "Basse",
-  medium: "Moyenne",
-  high: "Haute",
-  urgent: "Urgente",
-};
-
-export const MAINTENANCE_PRIORITY_TONES: Record<MaintenancePriority, Tone> = {
-  low: "neutral",
-  medium: "info",
-  high: "warning",
-  urgent: "danger",
-};
-
-export const MAINTENANCE_STATUS_LABELS: Record<MaintenanceStatus, string> = {
-  open: "Ouverte",
-  in_progress: "En cours",
-  resolved: "Résolue",
-  cancelled: "Annulée",
-};
-
-export const PAYMENT_DECLARATION_STATUS_LABELS: Record<
-  PaymentDeclarationStatus,
-  string
-> = {
-  pending: "En attente de validation",
-  accepted: "Validée",
-  rejected: "Refusée",
-};
-
-export const PAYMENT_DECLARATION_STATUS_TONES: Record<
-  PaymentDeclarationStatus,
-  Tone
-> = {
-  pending: "warning",
-  accepted: "success",
-  rejected: "danger",
-};
-
-/** Moyens de règlement proposés au locataire lorsqu'il déclare un paiement. */
-export const PAYMENT_METHODS = [
-  "Virement bancaire",
-  "Chèque",
-  "Espèces",
-  "Mobile money",
-  "Carte bancaire",
-  "Autre",
-] as const;
 
 // ---------------------------------------------------------------- rows
+
+/**
+ * L'organisation, et l'en-tête qu'elle imprime.
+ *
+ * Ces champs ne décrivent pas un compte client : ils décrivent ce qui
+ * s'imprime en haut de chaque pièce. C'est la raison d'être du produit —
+ * chaque entreprise émet ses propres reçus, sous sa propre identité.
+ */
 export type Organization = {
   id: string;
   name: string;
   slug: string;
   logo_url: string | null;
+  /** « S.A.R.L. », « S.A. »… accolé au nom. */
+  legal_form: string | null;
+  /** Sous-titre : « Société de travaux industriels et de prestation ». */
+  trade_name: string | null;
+  /** Accroche : « Votre domaine, notre expertise. » */
+  tagline: string | null;
+  /** Domaines d'activité, un par puce. */
+  activities: string[];
+  address: string | null;
+  phone: string | null;
+  phone_alt: string | null;
+  email: string | null;
+  email_alt: string | null;
+  website: string | null;
   created_at: string;
 };
 
 export type Profile = {
   id: string;
   organization_id: string;
-  /** Non nul ⇒ ce compte est un locataire, pas un membre du personnel. */
-  tenant_id: string | null;
   firstname: string;
   lastname: string;
   email: string;
@@ -168,105 +96,64 @@ export type Profile = {
   created_at: string;
 };
 
-export type Building = {
+export type Receipt = {
   id: string;
   organization_id: string;
-  name: string;
-  address: string;
-  city: string;
-  country: string;
-  photo: string | null;
-  estimated_value: number | null;
-  created_at: string;
-};
-
-export type Apartment = {
-  id: string;
-  organization_id: string;
-  building_id: string;
   number: string;
-  floor: string | null;
-  surface: number | null;
-  type: string | null;
-  status: ApartmentStatus;
-  created_at: string;
-};
-
-export type Tenant = {
-  id: string;
-  organization_id: string;
-  firstname: string;
-  lastname: string;
-  phone: string | null;
-  email: string | null;
-  identity_number: string | null;
-  created_at: string;
-};
-
-export type Lease = {
-  id: string;
-  organization_id: string;
-  tenant_id: string;
-  apartment_id: string;
-  rent: number;
-  charges: number;
-  deposit: number;
-  status: LeaseStatus;
-  start_date: string;
-  end_date: string | null;
-  created_at: string;
-};
-
-export type RentPayment = {
-  id: string;
-  organization_id: string;
-  lease_id: string;
-  month: string;
+  issued_on: string;
+  payer: string;
   amount: number;
-  amount_paid: number;
-  status: PaymentStatus;
-  payment_date: string | null;
-  method: string | null;
-  note: string | null;
+  amount_in_words: string;
+  articles: string;
+  advance: number;
+  balance: number;
+  issued_by: string;
+  created_by: string | null;
   created_at: string;
 };
 
-export type Notification = {
+export type CashVoucher = {
   id: string;
   organization_id: string;
-  recipient_id: string;
-  kind: NotificationKind;
-  title: string;
-  body: string | null;
-  href: string | null;
-  read_at: string | null;
-  created_at: string;
-};
-
-export type PaymentDeclaration = {
-  id: string;
-  organization_id: string;
-  rent_payment_id: string;
-  tenant_id: string;
+  number: string;
+  issued_on: string;
+  direction: CashDirection;
   amount: number;
-  paid_on: string;
-  method: string;
-  reference: string | null;
-  status: PaymentDeclarationStatus;
-  reviewed_by: string | null;
-  reviewed_at: string | null;
+  amount_in_words: string;
+  counterparty: string;
+  reason: string;
+  advance: number;
+  balance: number;
+  ordered_by: string;
+  settlement: CashSettlement;
+  deposit_ref: string | null;
+  account: CashAccount;
+  created_by: string | null;
   created_at: string;
 };
 
-export type Expense = {
+export type DeliveryNote = {
   id: string;
   organization_id: string;
-  building_id: string;
-  category: ExpenseCategory;
-  label: string;
-  amount: number;
-  expense_date: string;
-  invoice_path: string | null;
+  number: string;
+  issued_on: string;
+  issuer: string;
+  service: string;
+  nota: string;
+  created_by: string | null;
+  created_at: string;
+};
+
+export type DeliveryNoteLine = {
+  id: string;
+  organization_id: string;
+  delivery_note_id: string;
+  position: number;
+  designation: string;
+  /** Texte et non nombre : on écrit « 3 sacs », « 2 x 50 kg ». */
+  quantity: string;
+  destination: string;
+  observations: string;
   created_at: string;
 };
 
@@ -312,4 +199,17 @@ export function formatMonth(value: string | null | undefined) {
     year: "numeric",
   });
   return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+/**
+ * Date éclatée en jour / mois / année.
+ *
+ * Les pièces imprimées portent « Date : …/…/… » : trois cases, pas une
+ * date formatée. On les remplit séparément pour coller au papier que les
+ * entreprises utilisaient avant.
+ */
+export function splitDate(value: string | null | undefined) {
+  if (!value) return { day: "", month: "", year: "" };
+  const [year, month, day] = value.split("-");
+  return { day: day ?? "", month: month ?? "", year: year ?? "" };
 }

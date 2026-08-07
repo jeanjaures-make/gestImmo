@@ -20,8 +20,8 @@ function otpType(raw: string | null): EmailOtpType | null {
 }
 
 /**
- * Point d'atterrissage des liens d'activation : invitation d'un locataire ou
- * d'un collaborateur, réinitialisation de mot de passe, confirmation de compte.
+ * Point d'atterrissage des liens d'activation : invitation d'un collaborateur,
+ * réinitialisation de mot de passe, confirmation de compte.
  *
  * Deux formes de jeton arrivent ici, et il faut savoir traiter les deux :
  *

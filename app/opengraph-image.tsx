@@ -44,7 +44,7 @@ export default function OpengraphImage() {
               fontWeight: 700,
             }}
           >
-            I
+            C
           </div>
           <div style={{ fontSize: 34, fontWeight: 600, color: "#1F2937" }}>
             {SITE.name}
@@ -62,7 +62,7 @@ export default function OpengraphImage() {
               maxWidth: 900,
             }}
           >
-            Gérez votre patrimoine immobilier avec simplicité.
+            {`${SITE.tagline}.`}
           </div>
           <div
             style={{
@@ -72,15 +72,14 @@ export default function OpengraphImage() {
               maxWidth: 860,
             }}
           >
-            Immeubles, locataires, loyers, interventions et documents dans un
-            seul espace sécurisé.
+            {"Numérotation continue, montant en toutes lettres, impression fidèle — dans un espace sécurisé réservé à votre entreprise."}
           </div>
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <div style={{ width: 44, height: 4, background: "#6C8F7D" }} />
           <div style={{ fontSize: 24, color: "#55606F" }}>
-            Portail locataire inclus · Hébergement en Europe
+            Exports Excel inclus · Hébergement en Europe
           </div>
         </div>
       </div>

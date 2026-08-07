@@ -18,7 +18,7 @@ import { hasRole, requireSession } from "@/lib/auth";
 import { readPage } from "@/lib/pagination";
 import { createClient } from "@/lib/supabase/server";
 
-export const metadata = { title: "Journal d'audit — ImmoOps" };
+export const metadata = { title: "Journal d'audit — CaisseOps" };
 
 type AuditRow = {
   id: number;
@@ -36,14 +36,12 @@ type AuditRow = {
 };
 
 const ENTITY_LABELS: Record<string, string> = {
-  buildings: "Immeuble",
-  apartments: "Logement",
-  tenants: "Locataire",
-  leases: "Bail",
-  rent_payments: "Échéance",
-  expenses: "Dépense",
-  maintenance: "Intervention",
-  documents: "Document",
+  receipts: "Reçu",
+  cash_vouchers: "Bon de caisse",
+  delivery_notes: "Bon de sortie",
+  delivery_note_lines: "Article de bon de sortie",
+  organizations: "En-tête de l'entreprise",
+  profiles: "Membre",
 };
 
 const ACTION_LABELS: Record<AuditRow["action"], string> = {

@@ -4,7 +4,7 @@
  * Déclarée ici et nulle part ailleurs. Une devise éparpillée dans vingt
  * fichiers finit par diverger : un écran affiche encore l'ancienne, un
  * export en produit une troisième, et personne ne s'en aperçoit avant
- * qu'un locataire conteste un montant.
+ * qu'un payeur conteste le montant de son reçu.
  *
  * ⚠️ Deux francs CFA coexistent, de même valeur mais distincts :
  *   XOF — zone UEMOA (Sénégal, Côte d'Ivoire, Mali, Burkina, Bénin, Togo,
@@ -17,7 +17,7 @@
  */
 export const CURRENCY = "XOF" as const;
 
-/** Libellé court, pour les étiquettes de champ : « Loyer (F CFA) ». */
+/** Libellé court, pour les étiquettes de champ : « Montant (F CFA) ». */
 export const CURRENCY_LABEL = CURRENCY === "XOF" ? "F CFA" : "FCFA";
 
 /**
@@ -57,7 +57,7 @@ export function formatAmount(value: number | string | null | undefined) {
  * indicateur qu'on lit d'un coup d'œil, à condition que la valeur exacte
  * reste accessible — les appelants la passent en `title`.
  *
- * À n'utiliser QUE là où la place manque. Les listes, les quittances et
+ * À n'utiliser QUE là où la place manque. Les listes, les pièces et
  * tout ce qui fait foi gardent `formatCurrency`.
  */
 const compactFormatter = new Intl.NumberFormat("fr-FR", {

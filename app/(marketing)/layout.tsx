@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { Building2, Mail } from "lucide-react";
+import { Mail, Receipt } from "lucide-react";
 
 import { MarketingHeader } from "@/components/marketing/header";
 import { Container } from "@/components/marketing/ui";
+import { SITE } from "@/lib/site";
 
 const FOOTER = [
   {
@@ -19,7 +20,7 @@ const FOOTER = [
     links: [
       { href: "#faq", label: "Questions fréquentes" },
       { href: "/setup", label: "Diagnostic technique" },
-      { href: "mailto:contact@immoops.fr", label: "Nous contacter" },
+      { href: `mailto:${SITE.contact}`, label: "Nous contacter" },
     ],
   },
   {
@@ -62,23 +63,23 @@ export default function MarketingLayout({
             <div>
               <Link href="/" className="flex items-center gap-2.5">
                 <span className="flex size-8 items-center justify-center rounded-lg bg-[var(--m-deep)] text-white dark:text-[#101419]">
-                  <Building2 className="size-4" />
+                  <Receipt className="size-4" />
                 </span>
                 <span className="font-heading text-base font-semibold">
-                  ImmoOps
+                  {SITE.name}
                 </span>
               </Link>
               <p className="mt-4 max-w-xs text-sm leading-relaxed text-[var(--m-ink-soft)]">
-                La plateforme de pilotage immobilier des propriétaires,
-                gestionnaires et family offices.
+                {SITE.tagline}. Pour les PME de chantier, de négoce et de
+                commerce.
               </p>
               <div className="mt-5 flex flex-wrap gap-2">
                 <a
-                  href="mailto:contact@immoops.fr"
+                  href={`mailto:${SITE.contact}`}
                   className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[var(--m-line)] bg-[var(--m-surface)] px-3 text-sm text-[var(--m-ink-soft)] transition-colors hover:text-[var(--m-ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--m-deep)]"
                 >
                   <Mail className="size-4" />
-                  contact@immoops.fr
+                  {SITE.contact}
                 </a>
                 {[
                   { href: "https://www.linkedin.com", label: "LinkedIn" },
@@ -117,7 +118,7 @@ export default function MarketingLayout({
           </div>
 
           <div className="mt-12 flex flex-col gap-3 border-t border-[var(--m-line)] pt-6 text-sm text-[var(--m-ink-soft)] sm:flex-row sm:items-center sm:justify-between">
-            <p>© {new Date().getFullYear()} ImmoOps. Tous droits réservés.</p>
+            <p>© {new Date().getFullYear()} {SITE.name}. Tous droits réservés.</p>
             <p>Hébergement et données en Europe.</p>
           </div>
         </Container>

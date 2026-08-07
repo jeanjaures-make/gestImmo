@@ -12,8 +12,6 @@ export type Session = {
   email: string;
   profile: Profile;
   organization: Organization;
-  /** Id de la fiche locataire, ou null pour un membre du personnel. */
-  tenantId: string | null;
 };
 
 /**
@@ -58,17 +56,10 @@ export const getSession = cache(async (): Promise<
     email: user.email ?? profile.email,
     profile,
     organization,
-    tenantId: profile.tenant_id,
   };
 });
 
-/**
- * Exige une session de membre du personnel.
- *
- * Un locataire authentifié est renvoyé vers son espace : il n'a rien à
- * faire dans le back-office, et le RLS lui renverrait de toute façon des
- * écrans vides — ce qui serait déroutant plutôt que sécurisant.
- */
+/** Exige une session rattachée à une organisation. */
 export async function requireSession(): Promise<Session> {
   // La garde vit ici plutôt que dans le seul layout : une page et son layout
   // se rendent en parallèle, la page atteindrait donc Supabase avant que le
@@ -79,21 +70,7 @@ export async function requireSession(): Promise<Session> {
   const session = await getSession();
   if (session === null) redirect("/login");
   if (session === "no-profile") redirect("/onboarding");
-  if (session.tenantId) redirect("/portal");
   return session;
-}
-
-/** Session de locataire. Redirige le personnel vers le back-office. */
-export async function requireTenantSession(): Promise<
-  Session & { tenantId: string }
-> {
-  if (!isSupabaseConfigured()) redirect("/setup");
-
-  const session = await getSession();
-  if (session === null) redirect("/login");
-  if (session === "no-profile") redirect("/onboarding");
-  if (!session.tenantId) redirect("/dashboard");
-  return session as Session & { tenantId: string };
 }
 
 export const ROLE_RANK: Record<UserRole, number> = {
@@ -107,14 +84,25 @@ export function hasRole(role: UserRole, ...allowed: UserRole[]) {
   return allowed.includes(role);
 }
 
-/** Peut créer/modifier les données du parc (immeubles, baux, locataires…). */
-export function canManage(role: UserRole) {
-  return hasRole(role, "owner", "manager");
+/**
+ * Peut émettre et corriger des pièces.
+ *
+ * Le caissier en fait partie : c'est son métier, et lui refuser la saisie
+ * viderait le rôle de sa substance.
+ */
+export function canIssue(role: UserRole) {
+  return hasRole(role, "owner", "manager", "accountant");
 }
 
-/** Peut saisir des encaissements. */
-export function canRecordPayments(role: UserRole) {
-  return hasRole(role, "owner", "manager", "accountant");
+/**
+ * Peut supprimer une pièce.
+ *
+ * Plus restreint que l'émission : une suppression laisse un trou dans la
+ * numérotation, ce qu'un contrôle comptable relève. Le geste doit rester
+ * rare, et décidé par quelqu'un qui en répond.
+ */
+export function canDelete(role: UserRole) {
+  return hasRole(role, "owner", "manager");
 }
 
 /** Peut administrer l'organisation et ses membres. */

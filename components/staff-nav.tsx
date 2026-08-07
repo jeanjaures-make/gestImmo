@@ -2,25 +2,24 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Building2, LayoutDashboard, Users, Wallet, Wrench } from "lucide-react";
+import { LayoutDashboard, PackageOpen, Receipt, Wallet } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
 const NAV = [
   { href: "/dashboard", label: "Accueil", icon: LayoutDashboard },
-  { href: "/buildings", label: "Immeubles", icon: Building2 },
-  { href: "/tenants", label: "Locataires", icon: Users },
-  { href: "/payments", label: "Loyers", icon: Wallet },
-  { href: "/maintenance", label: "Travaux", icon: Wrench },
+  { href: "/receipts", label: "Reçus", icon: Receipt },
+  { href: "/cash-vouchers", label: "Caisse", icon: Wallet },
+  { href: "/delivery-notes", label: "Sorties", icon: PackageOpen },
 ];
 
 /**
  * Navigation basse du back-office, mobile uniquement.
  *
- * Le propriétaire consulte son parc depuis son téléphone : la barre
+ * Le caissier émet ses pièces depuis son téléphone, au comptoir : la barre
  * latérale, pertinente sur desktop, y devient inatteignable au pouce. Les
- * écrans plus rares (Dépenses, Documents, Audit, Équipe) restent
- * accessibles depuis la barre latérale à partir de `md`.
+ * écrans plus rares (Journal d'audit, Équipe, Réglages) restent accessibles
+ * depuis la barre latérale à partir de `md`.
  */
 export function StaffNav() {
   const pathname = usePathname();

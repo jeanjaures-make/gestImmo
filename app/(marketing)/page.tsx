@@ -1,21 +1,21 @@
 import type { Metadata } from "next";
 import {
-  Bell,
-  Building2,
+  Banknote,
   ChevronDown,
-  DoorOpen,
   FileLock2,
+  FileSpreadsheet,
   FileText,
   Gauge,
+  Hash,
   KeyRound,
-  LayoutDashboard,
+  PackageMinus,
+  Printer,
+  Receipt,
   ScrollText,
+  Search,
   ShieldCheck,
   Smartphone,
   Sparkles,
-  Users,
-  Wallet,
-  Wrench,
 } from "lucide-react";
 
 import { Hero } from "@/components/marketing/hero";
@@ -23,7 +23,7 @@ import {
   DashboardMockup,
   OwnerPhoneScreen,
   PhoneFrame,
-  TenantPhoneScreen,
+  ReceiptPhoneScreen,
 } from "@/components/marketing/mockups";
 import { Testimonials } from "@/components/marketing/testimonials";
 import {
@@ -34,54 +34,53 @@ import {
   Section,
   SectionHeading,
 } from "@/components/marketing/ui";
-import { faqJsonLd } from "@/lib/site";
+import { SITE, faqJsonLd } from "@/lib/site";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
-  title: "ImmoOps — Gérez votre patrimoine immobilier avec simplicité",
-  description:
-    "Immeubles, locataires, loyers, interventions et documents dans un seul espace sécurisé. Portail locataire inclus, pensé d'abord pour le téléphone.",
+  title: `${SITE.name} — ${SITE.tagline}`,
+  description: SITE.description,
   alternates: { canonical: "/" },
 };
 
 const FEATURES = [
   {
-    icon: Building2,
-    title: "Gestion des immeubles",
-    body: "Immeubles, logements, surfaces et valeur estimée. Le rendement se calcule tout seul.",
+    icon: Receipt,
+    title: "Reçus à votre en-tête",
+    body: "« Reçu de M./Mme », cadre bon pour francs, montant en toutes lettres, articles, avance et reste. Le reçu est établi au nom de qui l'émet.",
   },
   {
-    icon: Wallet,
-    title: "Gestion des loyers",
-    body: "Échéances générées à la création du bail, encaissements suivis, impayés visibles sans chercher.",
+    icon: Banknote,
+    title: "Bons de caisse",
+    body: "Entrée ou sortie, bénéficiaire, motif, avance et reste. Règlement cash ou dépôt avec référence de bordereau, imputation sur compte personnel ou compte entreprise.",
   },
   {
-    icon: FileLock2,
-    title: "Documents sécurisés",
-    body: "Baux et pièces justificatives dans un espace privé. Téléchargement par lien signé, valable une minute.",
+    icon: PackageMinus,
+    title: "Bons de sortie",
+    body: "Tableau d'articles — désignation, quantité, destination, observations — émetteur, service et visa du chef de service. Exemplaire chauffeur par défaut.",
   },
   {
-    icon: Wrench,
-    title: "Interventions",
-    body: "Le locataire déclare, vous suivez. Chaque changement de statut le prévient automatiquement.",
+    icon: Search,
+    title: "Recherche globale",
+    body: "Ctrl K, puis un numéro, un nom ou un motif. Les trois carnets répondent d'un coup, sans ouvrir de menu.",
   },
   {
-    icon: LayoutDashboard,
-    title: "Tableau de bord",
-    body: "Revenus, encaissé, impayés, occupation. Les quatre chiffres décisifs sans faire défiler.",
+    icon: FileSpreadsheet,
+    title: "Exports Excel",
+    body: "CSV avec BOM, séparateur point-virgule, décimales à virgule : ils s'ouvrent directement dans Excel francophone, sans retouche.",
   },
   {
-    icon: Users,
-    title: "Portail locataire",
-    body: "Bail, quittances, documents et déclaration de règlement. Son espace, et rien d'autre.",
+    icon: Printer,
+    title: "Impression fidèle",
+    body: "Les feuilles reproduisent le papier à en-tête — cadre BPF du reçu, tableau encadré du bon de sortie. L'aperçu est identique à l'imprimé.",
   },
 ];
 
 const BENEFITS = [
   {
     icon: ShieldCheck,
-    title: "Multi-tenant sécurisé",
-    body: "Chaque organisation est isolée par les politiques de PostgreSQL, pas par une condition dans le code.",
+    title: "Multi-entreprise cloisonné",
+    body: "Chaque organisation est isolée par les politiques de PostgreSQL, pas par une condition dans le code. Cloisonnement vérifié par un script exécutable.",
   },
   {
     icon: ScrollText,
@@ -89,14 +88,14 @@ const BENEFITS = [
     body: "Qui a fait quoi, quand, depuis quelle adresse. Écrit par la base : l'application ne peut pas l'éviter.",
   },
   {
-    icon: Bell,
-    title: "Notifications",
-    body: "Bail disponible, loyer encaissé, incident mis à jour. Émises par la base, jamais oubliées.",
+    icon: Hash,
+    title: "Numérotation sans trou",
+    body: "REC-2026-0001, BC-2026-0001, BS-2026-0001 : continue, par nature et par année, gelée après émission. Une suppression reste visible en cas de contrôle.",
   },
   {
     icon: Smartphone,
     title: "Mobile first",
-    body: "Barre de navigation basse, cartes plutôt que tableaux, cibles tactiles généreuses.",
+    body: "Barre de navigation basse, cartes plutôt que tableaux, cibles tactiles généreuses. Pensé pour le comptoir et le téléphone.",
   },
   {
     icon: Gauge,
@@ -106,7 +105,7 @@ const BENEFITS = [
   {
     icon: Sparkles,
     title: "Simplicité",
-    body: "Un parcours par métier. Rien à paramétrer avant de créer son premier immeuble.",
+    body: "Un formulaire par pièce. Rien à paramétrer avant d'émettre le premier reçu.",
   },
 ];
 
@@ -114,22 +113,22 @@ const SECURITY = [
   {
     icon: ShieldCheck,
     title: "Données cloisonnées",
-    body: "Deux barrières indépendantes : les politiques de sécurité au niveau ligne, et des clés étrangères composites qui rendent un rattachement entre organisations impossible pour PostgreSQL lui-même.",
+    body: "Chaque entreprise ne voit que ses données grâce aux politiques de sécurité au niveau ligne de PostgreSQL. Le cloisonnement est prouvé par un script exécutable qui monte deux organisations et vérifie qu'aucune n'atteint l'autre.",
   },
   {
     icon: FileLock2,
-    title: "Documents privés",
-    body: "Aucun fichier n'est servi directement. Chaque téléchargement passe par une URL signée à durée de vie courte, et le locataire n'atteint que les pièces de ses propres baux.",
+    title: "Comptes protégés",
+    body: "Mots de passe de douze caractères minimum, limitation des tentatives, événements de connexion journalisés. Hébergement dans l'Union européenne.",
   },
   {
     icon: KeyRound,
     title: "Rôles et permissions",
-    body: "Propriétaire, gestionnaire, comptable, lecture seule. Un compte locataire est structurellement distinct du personnel : les deux périmètres ne se recoupent jamais.",
+    body: "Propriétaire, gestionnaire, caissier, lecture seule. Le caissier émet et corrige mais ne supprime pas ; la suppression d'une pièce est réservée aux propriétaires et gestionnaires.",
   },
   {
     icon: ScrollText,
     title: "Journal d'audit",
-    body: "Chaque création, modification et suppression est journalisée par un déclencheur en base, avec l'avant, l'après et les colonnes réellement modifiées.",
+    body: "Chaque création, modification et suppression est journalisée par un déclencheur en base, avec l'acteur, l'avant, l'après et l'adresse IP. Consultation réservée aux propriétaires et gestionnaires.",
   },
 ];
 
@@ -138,11 +137,11 @@ const PLANS = [
     name: "Starter",
     price: "3 000 F CFA",
     unit: "/ mois",
-    pitch: "Pour un premier parc géré sérieusement.",
+    pitch: "Pour un comptoir qui veut des pièces propres.",
     features: [
-      "Jusqu'à 10 logements",
-      "Portail locataire inclus",
-      "Quittances et documents",
+      "Jusqu'à 100 pièces par mois",
+      "Reçus, bons de caisse et bons de sortie",
+      "Impression à votre en-tête",
       "Un utilisateur",
     ],
     cta: "Commencer gratuitement",
@@ -152,9 +151,9 @@ const PLANS = [
     name: "Business",
     price: "6 000 F CFA",
     unit: "/ mois",
-    pitch: "Pour les cabinets et les parcs qui grandissent.",
+    pitch: "Pour les magasins et les chantiers qui grandissent.",
     features: [
-      "Jusqu'à 100 logements",
+      "Jusqu'à 1 000 pièces par mois",
       "Rôles et permissions",
       "Journal d'audit complet",
       "Cinq utilisateurs",
@@ -170,9 +169,9 @@ const PLANS = [
     // afficher une remise par rapport à un tarif jamais pratiqué est une
     // annonce trompeuse, et sanctionnée comme telle.
     badge: "Offre de lancement",
-    pitch: "Parc et équipe sans limite, pour les family offices et sociétés de gestion.",
+    pitch: "Volume et équipe sans limite, pour les groupes et les réseaux de magasins.",
     features: [
-      "Logements illimités",
+      "Pièces illimitées",
       "Utilisateurs illimités",
       "Journal d'audit complet",
       "Accompagnement à la reprise de données",
@@ -185,28 +184,28 @@ const PLANS = [
 
 const FAQ = [
   {
-    q: "Mes données sont-elles isolées de celles des autres clients ?",
-    a: "Oui, et pas seulement par convention. L'isolation repose sur les politiques de sécurité au niveau ligne de PostgreSQL et sur des clés étrangères composites : rattacher une donnée d'une organisation à une autre est rejeté par la base, pas par une vérification applicative qu'un défaut pourrait contourner. Cette étanchéité est éprouvée automatiquement à chaque déploiement.",
+    q: "Mes données sont-elles isolées de celles des autres entreprises ?",
+    a: "Oui, et pas seulement par convention. L'isolation repose sur les politiques de sécurité au niveau ligne de PostgreSQL : atteindre la donnée d'une autre organisation est rejeté par la base, pas par une vérification applicative qu'un défaut pourrait contourner. Ce cloisonnement est prouvé par un script exécutable, qui monte deux organisations et vérifie l'étanchéité.",
   },
   {
-    q: "Le locataire peut-il voir les données des autres locataires ?",
-    a: "Non. Un compte locataire est structurellement distinct d'un compte du personnel : il n'atteint que ses baux, ses échéances, ses documents et ses incidents. Il ne peut pas non plus modifier ses propres échéances — déclarer un règlement et l'encaisser sont deux actes séparés.",
+    q: "La numérotation peut-elle avoir des trous ?",
+    a: "Non par usage normal : la numérotation est continue, par nature de pièce et par année — REC-2026-0001, BC-2026-0001, BS-2026-0001 — attribuée par la base et gelée après émission. Supprimer une pièce est réservé aux propriétaires et gestionnaires, et le trou est assumé : il reste visible en cas de contrôle.",
   },
   {
-    q: "Peut-on payer son loyer en ligne ?",
-    a: "Pas encore. Le locataire déclare un règlement effectué par ailleurs — virement, chèque, espèces — avec le montant, la date et la référence. Le gestionnaire le valide, et c'est cette validation seule qui enregistre l'encaissement. Le raccordement d'un prestataire de paiement s'insérera au même endroit.",
+    q: "Le montant en toutes lettres est-il fiable ?",
+    a: "Il est proposé automatiquement à la frappe, en français correct — « deux cent soixante-quinze mille francs CFA ». Vous pouvez le modifier avant d'émettre, puis il est stocké tel quel : c'est cette mention qui fait foi sur la pièce.",
   },
   {
-    q: "Que se passe-t-il si je dépasse mon offre ?",
-    a: "Rien de brutal : aucune donnée n'est supprimée ni masquée. Nous vous prévenons et vous laissons choisir votre offre suivante.",
+    q: "Mes clients ou mes chauffeurs ont-ils un compte ?",
+    a: "Non. CaisseOps est l'outil de votre entreprise, pas un portail pour des tiers : les pièces s'impriment et se remettent en main propre. Il n'y a pas de paiement en ligne ni d'espace client.",
   },
   {
     q: "Puis-je exporter mes données ?",
-    a: "Vos données restent les vôtres. Elles sont stockées dans une base PostgreSQL standard, exportables sans format propriétaire. Une organisation peut être entièrement supprimée sur demande.",
+    a: "Vos données restent les vôtres. Reçus, bons de caisse et bons de sortie s'exportent en CSV avec BOM, séparateur point-virgule et décimales à virgule : les fichiers s'ouvrent directement dans Excel francophone. Une organisation peut être entièrement supprimée sur demande.",
   },
   {
     q: "L'application fonctionne-t-elle bien sur téléphone ?",
-    a: "C'est l'écran de référence, pas une adaptation. Les espaces propriétaire et locataire sont conçus pour une utilisation à une main : navigation en bas d'écran, cartes plutôt que tableaux à défilement horizontal, et cibles tactiles d'au moins 44 pixels.",
+    a: "C'est l'écran de référence, pas une adaptation. L'interface est conçue pour le comptoir et une utilisation à une main : navigation en bas d'écran, cartes plutôt que tableaux à défilement horizontal, et cibles tactiles d'au moins 44 pixels. Thème clair et sombre.",
   },
 ];
 
@@ -230,11 +229,11 @@ export default function LandingPage() {
         </p>
         <ul className="mt-8 grid grid-cols-2 items-center gap-6 sm:grid-cols-3 lg:grid-cols-5">
           {[
-            "Vallier Patrimoine",
-            "Groupe Tilleuls",
-            "Résidences Nord",
-            "Cabinet Rivage",
-            "Foncière Lumen",
+            "Négoce Lagune",
+            "BTP Konan & Fils",
+            "Magasin Le Comptoir",
+            "Transports Adjamé",
+            "Ets Awa Diallo",
           ].map((name) => (
             <li
               key={name}
@@ -256,8 +255,8 @@ export default function LandingPage() {
       <Section id="fonctionnalites">
         <SectionHeading
           eyebrow="Fonctionnalités"
-          title="Tout ce qu'un parc réclame, au même endroit"
-          lead="Six domaines, un seul espace. Pas de module à activer, pas de paramétrage préalable."
+          title="Trois pièces, un seul comptoir"
+          lead="Reçus, bons de caisse, bons de sortie : un espace unique, à l'en-tête de votre entreprise. Pas de module à activer, pas de paramétrage préalable."
         />
 
         <ul className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -283,8 +282,8 @@ export default function LandingPage() {
       <Section id="demonstration" tone="subtle">
         <SectionHeading
           eyebrow="Démonstration"
-          title="Trois espaces, trois métiers"
-          lead="Le propriétaire pilote, le gestionnaire exécute, le locataire se sert. Chacun voit ce qui le concerne, et rien de plus."
+          title="Trois carnets, quatre rôles"
+          lead="Le propriétaire pilote, le gestionnaire administre, le caissier émet, la lecture seule consulte. Chacun voit ce qui le concerne, et rien de plus."
         />
 
         <Reveal className="mt-12">
@@ -295,15 +294,15 @@ export default function LandingPage() {
           {[
             {
               title: "Propriétaire",
-              body: "Revenus, occupation, rendement, alertes. La vue d'ensemble sans le détail.",
+              body: "En-tête de l'entreprise, membres, journal d'audit. Tous les droits, y compris la suppression.",
             },
             {
               title: "Gestionnaire",
-              body: "Baux, échéances, interventions, documents. Les écrans du quotidien.",
+              body: "Émet, corrige et supprime les pièces. Les écrans du quotidien et le journal d'audit.",
             },
             {
-              title: "Locataire",
-              body: "Bail, prochain loyer, quittances, incidents. Un espace, pas un back-office.",
+              title: "Caissier",
+              body: "Émet et corrige, ne supprime pas. Le comptoir, rien d'autre.",
             },
           ].map(({ title, body }) => (
             <Reveal key={title}>
@@ -318,10 +317,10 @@ export default function LandingPage() {
         </div>
       </Section>
 
-      {/* ------------------------------------------- Pourquoi ImmoOps */}
+      {/* ------------------------------------------- Pourquoi CaisseOps */}
       <Section>
         <SectionHeading
-          eyebrow="Pourquoi ImmoOps"
+          eyebrow={`Pourquoi ${SITE.name}`}
           title="Des garanties, pas des promesses"
           lead="Les règles qui comptent sont appliquées par la base de données. Aucun chemin applicatif ne peut les contourner — pas même une erreur de notre part."
         />
@@ -354,8 +353,8 @@ export default function LandingPage() {
           <div className="lg:sticky lg:top-24 lg:self-start">
             <SectionHeading
               eyebrow="Sécurité"
-              title="Conçu pour des données que l'on ne perd pas"
-              lead="Vos locataires vous confient des pièces d'identité, des relevés, des contrats. Le niveau d'exigence n'est pas négociable."
+              title="Conçu pour des pièces qui font foi"
+              lead="Vos reçus et vos bons engagent votre entreprise en cas de contrôle. Le niveau d'exigence n'est pas négociable."
             />
             <div className="mt-8">
               <SecondaryLink href="/setup">
@@ -390,21 +389,21 @@ export default function LandingPage() {
           align="center"
           eyebrow="Mobile"
           title="Le téléphone est l'écran de référence"
-          lead="Propriétaires et locataires se connectent depuis leur poche. L'interface n'est pas un bureau réduit : elle est pensée pour une main."
+          lead="Au comptoir, on émet entre deux clients, souvent à une main. L'interface n'est pas un bureau réduit : elle est pensée pour ce rythme."
         />
 
         <Reveal className="mt-14 flex flex-wrap items-start justify-center gap-10 sm:gap-16">
-          <PhoneFrame label="Espace propriétaire">
+          <PhoneFrame label="Vue d'ensemble">
             <OwnerPhoneScreen />
           </PhoneFrame>
-          <PhoneFrame label="Portail locataire">
-            <TenantPhoneScreen />
+          <PhoneFrame label="Feuille de reçu">
+            <ReceiptPhoneScreen />
           </PhoneFrame>
         </Reveal>
 
         <ul className="mx-auto mt-14 grid max-w-3xl gap-4 sm:grid-cols-3">
           {[
-            { icon: DoorOpen, label: "Navigation en bas d'écran" },
+            { icon: Smartphone, label: "Navigation en bas d'écran" },
             { icon: FileText, label: "Cartes plutôt que tableaux" },
             { icon: Gauge, label: "Cibles tactiles de 44 px" },
           ].map(({ icon: Icon, label }) => (
@@ -423,7 +422,7 @@ export default function LandingPage() {
       <Section tone="subtle">
         <SectionHeading
           eyebrow="Témoignages"
-          title="Ce que change un espace unique"
+          title="Ce que change une caisse tenue"
         />
         <Testimonials />
         <p className="mt-6 text-xs text-[var(--m-ink-soft)]">
@@ -439,7 +438,7 @@ export default function LandingPage() {
           align="center"
           eyebrow="Tarifs"
           title="Une offre lisible, sans engagement"
-          lead="Tous les plans incluent le portail locataire, les quittances et l'hébergement sécurisé. Sans engagement, résiliable à tout moment."
+          lead="Tous les plans incluent les trois pièces, l'impression à votre en-tête et l'hébergement sécurisé. Sans engagement, résiliable à tout moment."
         />
 
         <ul className="mt-12 grid gap-5 lg:grid-cols-3">
@@ -540,7 +539,7 @@ export default function LandingPage() {
         <Reveal>
           <div className="rounded-3xl border border-[var(--m-line)] bg-[var(--m-surface)] px-6 py-14 text-center sm:px-14">
             <h2 className="font-heading mx-auto max-w-2xl text-3xl font-semibold tracking-tight text-balance sm:text-4xl">
-              Reprenez la main sur votre parc, dès aujourd&apos;hui
+              Tenez votre caisse au propre, dès aujourd&apos;hui
             </h2>
             <p className="mx-auto mt-4 max-w-xl leading-relaxed text-[var(--m-ink-soft)] text-pretty">
               Créez votre organisation en deux minutes. Aucune carte bancaire
@@ -549,7 +548,9 @@ export default function LandingPage() {
             </p>
             <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
               <PrimaryLink href="/signup">Créer un compte</PrimaryLink>
-              <SecondaryLink href="mailto:contact@immoops.fr?subject=Démonstration%20ImmoOps">
+              <SecondaryLink
+                href={`mailto:${SITE.contact}?subject=Démonstration%20${SITE.name}`}
+              >
                 Réserver une démonstration
               </SecondaryLink>
             </div>

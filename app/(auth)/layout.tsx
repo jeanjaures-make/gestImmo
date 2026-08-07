@@ -12,7 +12,7 @@ export default function AuthLayout({
           <span className="flex size-11 items-center justify-center rounded-xl bg-primary text-primary-foreground">
             <Building2 className="size-6" />
           </span>
-          <span className="font-heading text-lg font-semibold">ImmoOps</span>
+          <span className="font-heading text-lg font-semibold">CaisseOps</span>
         </div>
         {children}
       </div>

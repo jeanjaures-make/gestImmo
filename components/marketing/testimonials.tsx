@@ -17,21 +17,21 @@ import { cn } from "@/lib/utils";
 const QUOTES = [
   {
     quote:
-      "Je vois en dix secondes ce qui est encaissé et ce qui ne l'est pas. Avant, il me fallait ouvrir trois tableurs et faire confiance à ma mémoire.",
-    author: "Propriétaire bailleur",
-    detail: "24 lots, région lyonnaise",
+      "Le montant en toutes lettres s'écrit tout seul pendant que je tape. Je vérifie, j'imprime, et le client repart avec un reçu propre.",
+    author: "Caissière",
+    detail: "Négoce de matériaux, comptoir unique",
   },
   {
     quote:
-      "Mes locataires déclarent leurs virements depuis leur téléphone. Je valide, la quittance part. Le téléphone ne sonne plus pour ça.",
-    author: "Gestionnaire",
-    detail: "Cabinet de gestion, 3 collaborateurs",
+      "Sur le chantier de Koumassi, chaque sortie de ciment part avec un bon numéroté et visé par le chef de service. Les discussions sur ce qui est sorti ont disparu.",
+    author: "Chef d'entreprise",
+    detail: "Entreprise de travaux, deux chantiers",
   },
   {
     quote:
-      "Le journal d'audit a réglé une discussion en deux minutes : qui avait modifié le loyer, quand, et depuis quelle adresse.",
-    author: "Family office",
-    detail: "Portefeuille résidentiel",
+      "L'export s'ouvre directement dans Excel, décimales à virgule. Et le journal d'audit me dit qui a corrigé quoi, quand, et depuis quelle adresse.",
+    author: "Comptable",
+    detail: "Cabinet, plusieurs entreprises suivies",
   },
 ];
 

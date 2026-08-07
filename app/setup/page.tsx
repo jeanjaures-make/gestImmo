@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/kit";
 import { runDiagnostics, type CheckStatus } from "@/lib/diagnostics";
 
-export const metadata = { title: "Configuration — ImmoOps" };
+export const metadata = { title: "Configuration — CaisseOps" };
 
 // Toujours recalculé : l'intérêt de cette page est de refléter l'état courant.
 export const dynamic = "force-dynamic";
@@ -33,7 +33,7 @@ export default async function SetupPage() {
             <Building2 className="size-6" />
           </span>
           <h1 className="font-heading text-xl font-semibold">
-            Configuration d&apos;ImmoOps
+            Configuration de CaisseOps
           </h1>
           <p className="text-sm text-muted-foreground">
             {allGood

@@ -78,90 +78,20 @@ function ChartTooltip({
 
 const LEGEND_STYLE = { fontSize: 12, paddingTop: 8 } as const;
 
-export type MonthlyRevenuePoint = {
-  month: string;
-  due: number;
-  collected: number;
-};
-
-/** Deux séries → barres groupées, légende obligatoire. */
-export function MonthlyRevenueChart({ data }: { data: MonthlyRevenuePoint[] }) {
-  return (
-    <ResponsiveContainer width="100%" height={240}>
-      <BarChart data={data} barGap={2} margin={{ top: 4, right: 4, bottom: 0, left: -12 }}>
-        <CartesianGrid {...GRID} />
-        <XAxis dataKey="month" {...AXIS} />
-        <YAxis {...AXIS} tickFormatter={(v: number) => compact.format(v)} />
-        <Tooltip
-          cursor={{ fill: "var(--muted)", opacity: 0.4 }}
-          content={<ChartTooltip />}
-        />
-        <Legend wrapperStyle={LEGEND_STYLE} />
-        <Bar
-          dataKey="due"
-          name="Dû"
-          fill="var(--chart-1)"
-          radius={[4, 4, 0, 0]}
-          maxBarSize={18}
-        />
-        <Bar
-          dataKey="collected"
-          name="Encaissé"
-          fill="var(--chart-2)"
-          radius={[4, 4, 0, 0]}
-          maxBarSize={18}
-        />
-      </BarChart>
-    </ResponsiveContainer>
-  );
-}
-
-export type MonthlyExpensePoint = { month: string; amount: number };
-
-/** Série unique → pas de boîte de légende, le titre de la carte suffit. */
-export function MonthlyExpensesChart({ data }: { data: MonthlyExpensePoint[] }) {
-  return (
-    <ResponsiveContainer width="100%" height={240}>
-      <AreaChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: -12 }}>
-        <defs>
-          <linearGradient id="expenseFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--chart-3)" stopOpacity={0.28} />
-            <stop offset="100%" stopColor="var(--chart-3)" stopOpacity={0.02} />
-          </linearGradient>
-        </defs>
-        <CartesianGrid {...GRID} />
-        <XAxis dataKey="month" {...AXIS} />
-        <YAxis {...AXIS} tickFormatter={(v: number) => compact.format(v)} />
-        <Tooltip
-          cursor={{ stroke: "var(--border)" }}
-          content={<ChartTooltip />}
-        />
-        <Area
-          type="monotone"
-          dataKey="amount"
-          name="Dépenses"
-          stroke="var(--chart-3)"
-          strokeWidth={2}
-          fill="url(#expenseFill)"
-          dot={false}
-          activeDot={{ r: 4, strokeWidth: 2, stroke: "var(--card)" }}
-        />
-      </AreaChart>
-    </ResponsiveContainer>
-  );
-}
-
 export type CashflowPoint = {
   month: string;
-  collected: number;
-  expenses: number;
+  entrees: number;
+  sorties: number;
   net: number;
 };
 
 /**
- * Encaissements et dépenses partagent la même unité : une seule échelle
- * suffit. Un axe secondaire serait ici une erreur de lecture, pas un choix
- * esthétique.
+ * Le mouvement de caisse, mois par mois.
+ *
+ * Entrées et sorties partagent la même unité : une seule échelle suffit. Un
+ * axe secondaire serait ici une erreur de lecture, pas un choix esthétique.
+ * La ligne du solde passe sous zéro quand la caisse a plus décaissé
+ * qu'encaissé — c'est précisément ce qu'on vient chercher.
  */
 export function CashflowChart({ data }: { data: CashflowPoint[] }) {
   return (
@@ -180,15 +110,15 @@ export function CashflowChart({ data }: { data: CashflowPoint[] }) {
         />
         <Legend wrapperStyle={LEGEND_STYLE} />
         <Bar
-          dataKey="collected"
-          name="Encaissé"
+          dataKey="entrees"
+          name="Entrées"
           fill="var(--chart-2)"
           radius={[4, 4, 0, 0]}
           maxBarSize={16}
         />
         <Bar
-          dataKey="expenses"
-          name="Dépenses"
+          dataKey="sorties"
+          name="Sorties"
           fill="var(--chart-3)"
           radius={[4, 4, 0, 0]}
           maxBarSize={16}
@@ -196,7 +126,7 @@ export function CashflowChart({ data }: { data: CashflowPoint[] }) {
         <Line
           type="monotone"
           dataKey="net"
-          name="Cashflow net"
+          name="Solde"
           stroke="var(--chart-1)"
           strokeWidth={2}
           dot={false}
@@ -207,36 +137,91 @@ export function CashflowChart({ data }: { data: CashflowPoint[] }) {
   );
 }
 
-export type PortfolioPoint = { name: string; apartments: number };
+export type ReceiptsPoint = { month: string; amount: number };
 
-/** Comparaison de grandeurs entre catégories nommées → barres horizontales. */
-export function PortfolioChart({ data }: { data: PortfolioPoint[] }) {
+/** Série unique → pas de boîte de légende, le titre de la carte suffit. */
+export function ReceiptsChart({ data }: { data: ReceiptsPoint[] }) {
   return (
-    <ResponsiveContainer width="100%" height={Math.max(160, data.length * 40)}>
+    <ResponsiveContainer width="100%" height={240}>
+      <AreaChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: -12 }}>
+        <defs>
+          <linearGradient id="receiptsFill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--chart-2)" stopOpacity={0.28} />
+            <stop offset="100%" stopColor="var(--chart-2)" stopOpacity={0.02} />
+          </linearGradient>
+        </defs>
+        <CartesianGrid {...GRID} />
+        <XAxis dataKey="month" {...AXIS} />
+        <YAxis {...AXIS} tickFormatter={(v: number) => compact.format(v)} />
+        <Tooltip
+          cursor={{ stroke: "var(--border)" }}
+          content={<ChartTooltip />}
+        />
+        <Area
+          type="monotone"
+          dataKey="amount"
+          name="Reçus"
+          stroke="var(--chart-2)"
+          strokeWidth={2}
+          fill="url(#receiptsFill)"
+          dot={false}
+          activeDot={{ r: 4, strokeWidth: 2, stroke: "var(--card)" }}
+        />
+      </AreaChart>
+    </ResponsiveContainer>
+  );
+}
+
+export type IssuancePoint = {
+  month: string;
+  receipts: number;
+  vouchers: number;
+  notes: number;
+};
+
+/**
+ * Le nombre de pièces émises, par nature.
+ *
+ * Des effectifs, pas des montants : l'infobulle le dit en n'affichant pas
+ * de devise. C'est l'indicateur d'activité du carnet — un mois sans bon de
+ * sortie se voit d'un coup d'œil.
+ */
+export function IssuanceChart({ data }: { data: IssuancePoint[] }) {
+  return (
+    <ResponsiveContainer width="100%" height={240}>
       <BarChart
         data={data}
-        layout="vertical"
-        margin={{ top: 4, right: 16, bottom: 0, left: 4 }}
+        barGap={2}
+        margin={{ top: 4, right: 4, bottom: 0, left: -20 }}
       >
-        <CartesianGrid {...GRID} vertical horizontal={false} />
-        <XAxis type="number" allowDecimals={false} {...AXIS} />
-        <YAxis
-          type="category"
-          dataKey="name"
-          width={110}
-          {...AXIS}
-          tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
-        />
+        <CartesianGrid {...GRID} />
+        <XAxis dataKey="month" {...AXIS} />
+        <YAxis {...AXIS} allowDecimals={false} />
         <Tooltip
           cursor={{ fill: "var(--muted)", opacity: 0.4 }}
           content={<ChartTooltip unit="count" />}
         />
+        <Legend wrapperStyle={LEGEND_STYLE} />
         <Bar
-          dataKey="apartments"
-          name="Logements"
+          dataKey="receipts"
+          name="Reçus"
           fill="var(--chart-1)"
-          radius={[0, 4, 4, 0]}
-          maxBarSize={18}
+          radius={[4, 4, 0, 0]}
+          maxBarSize={14}
+        />
+        <Bar
+          dataKey="vouchers"
+          name="Bons de caisse"
+          fill="var(--chart-2)"
+          radius={[4, 4, 0, 0]}
+          maxBarSize={14}
+        />
+        <Bar
+          dataKey="notes"
+          name="Bons de sortie"
+          fill="var(--chart-4)"
+          radius={[4, 4, 0, 0]}
+          maxBarSize={14}
         />
       </BarChart>
     </ResponsiveContainer>

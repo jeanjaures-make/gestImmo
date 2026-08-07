@@ -18,40 +18,22 @@ const DELETABLE: Record<
   string,
   { roles: UserRole[]; paths: string[]; label: string }
 > = {
-  buildings: {
+  receipts: {
     roles: ["owner", "manager"],
-    paths: ["/buildings", "/apartments", "/", "/expenses", "/maintenance"],
-    label: "immeuble",
+    paths: ["/receipts", "/dashboard"],
+    label: "reçu",
   },
-  apartments: {
+  cash_vouchers: {
     roles: ["owner", "manager"],
-    paths: ["/apartments", "/leases", "/"],
-    label: "logement",
+    paths: ["/cash-vouchers", "/dashboard"],
+    label: "bon de caisse",
   },
-  tenants: {
+  // Les articles partent avec le bon : la clé étrangère composite est
+  // déclarée ON DELETE CASCADE, aucun ménage applicatif n'est nécessaire.
+  delivery_notes: {
     roles: ["owner", "manager"],
-    paths: ["/tenants", "/leases", "/"],
-    label: "locataire",
-  },
-  leases: {
-    roles: ["owner", "manager"],
-    paths: ["/leases", "/apartments", "/payments", "/"],
-    label: "bail",
-  },
-  rent_payments: {
-    roles: ["owner", "manager", "accountant"],
-    paths: ["/payments", "/"],
-    label: "échéance",
-  },
-  expenses: {
-    roles: ["owner", "manager"],
-    paths: ["/expenses", "/"],
-    label: "dépense",
-  },
-  maintenance: {
-    roles: ["owner", "manager"],
-    paths: ["/maintenance", "/"],
-    label: "intervention",
+    paths: ["/delivery-notes", "/dashboard"],
+    label: "bon de sortie",
   },
 };
 

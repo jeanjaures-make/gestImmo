@@ -3,13 +3,11 @@ import { redirect } from "next/navigation";
 import { LogOut, Settings } from "lucide-react";
 
 import { GlobalSearch } from "@/components/global-search";
-import { NotificationBell } from "@/components/notification-bell";
 import { Sidebar } from "@/components/sidebar";
 import { StaffNav } from "@/components/staff-nav";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button, StatusBadge } from "@/components/ui/kit";
 import { requireSession } from "@/lib/auth";
-import { getUnreadCount } from "@/lib/notifications";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { ROLE_LABELS } from "@/lib/types";
 
@@ -32,7 +30,6 @@ export default async function DashboardLayout({
 
   // Redirige vers /login ou /onboarding selon l'état du compte.
   const { profile, organization, email } = await requireSession();
-  const unread = await getUnreadCount();
 
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
@@ -54,7 +51,6 @@ export default async function DashboardLayout({
           <span className="hidden truncate text-sm text-muted-foreground sm:inline">
             {email}
           </span>
-          <NotificationBell href="/notifications" count={unread} />
           <Button variant="ghost" size="icon" render={<Link href="/settings" />}>
             <Settings className="size-4" />
             <span className="sr-only">Réglages</span>

@@ -1,4 +1,4 @@
-# Mise en production d'ImmoOps
+# Mise en production de CaisseOps
 
 Ce document sert à mettre le produit en service, puis à vérifier qu'il
 l'est réellement. Il liste aussi ce qui n'est **pas** couvert — un état des
@@ -15,12 +15,12 @@ Déclarées sur Vercel dans `Project Settings → Environment Variables`, pour
 |---|---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` | oui | URL du projet. C'est une URL, pas une clé. |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | oui | Clé publique. Soumise au RLS. |
-| `SUPABASE_SERVICE_ROLE_KEY` | oui | Crée les comptes que l'organisation n'ouvre pas elle-même : invitation d'un collaborateur, ouverture de l'espace d'un locataire. **Contourne le RLS** : jamais de préfixe `NEXT_PUBLIC_`. |
+| `SUPABASE_SERVICE_ROLE_KEY` | oui | Crée les comptes que l'organisation n'ouvre pas elle-même : invitation d'un collaborateur. **Contourne le RLS** : jamais de préfixe `NEXT_PUBLIC_`. |
 | `SMTP_PROVIDER_CONFIGURED` | non | `true` une fois un vrai SMTP raccordé. Purement déclaratif : éteint l'avertissement de `/setup`, n'active rien. |
 | `SENTRY_DSN` | non | Prépare le signalement d'erreurs. Absent, l'application fonctionne normalement. |
 
-Sans `SUPABASE_SERVICE_ROLE_KEY`, le portail locataire reste inaccessible :
-personne ne peut y être invité.
+Sans `SUPABASE_SERVICE_ROLE_KEY`, l'invitation d'un collaborateur reste
+impossible : personne ne peut être ajouté à l'organisation.
 
 Le build **n'exige aucune de ces variables** : il aboutit sans elles, et
 l'application dégrade vers l'écran de diagnostic `/setup`. C'est vérifié par
@@ -30,7 +30,7 @@ la CI, qui compile volontairement sans configuration.
 
 ## 2. Services externes
 
-### Supabase — base, authentification, stockage
+### Supabase — base, authentification
 
 1. `SQL Editor` → coller [`supabase/schema.sql`](supabase/schema.sql) →
    exécuter. Le script est **rejouable** et ne détruit aucune donnée : il
@@ -43,8 +43,6 @@ la CI, qui compile volontairement sans configuration.
    parcours qui repasse par un lien envoyé par Supabase. Les liens
    d'activation, eux, sont fabriqués par l'application sur son propre
    domaine et ne dépendent pas de ce réglage.
-3. Vérifier que le bucket `documents` est **privé** (le script s'en charge,
-   mais un bucket public rendrait tous les baux téléchargeables).
 
 ### SMTP — non bloquant
 
@@ -54,22 +52,21 @@ Postmark, SendGrid…), puis poser `SMTP_PROVIDER_CONFIGURED=true`.
 **La mise en service ne l'exige plus.** Le SMTP intégré de Supabase répond
 `429 — email rate limit exceeded` après une poignée d'envois : sur le
 projet de développement, une fois le quota atteint, plus aucun compte ne
-pouvait être créé ni aucun locataire invité. Les trois parcours qui
-en dépendaient ont donc été refaits sans envoi :
+pouvait être créé ni aucun collaborateur invité. Les deux parcours qui en
+dépendaient ont donc été refaits sans envoi :
 
 | Parcours | Ce qui se passe |
 | --- | --- |
 | Inscription | Le compte est créé et la session ouverte dans la foulée. |
-| Ouverture d'un espace locataire | L'écran rend un **lien d'activation** que le gestionnaire transmet par WhatsApp, SMS ou de vive voix. |
-| Invitation d'un collaborateur | Même principe. |
+| Invitation d'un collaborateur | L'écran Équipe rend un **lien d'activation** que le gestionnaire transmet par WhatsApp, SMS ou de vive voix. |
 
 Ce n'est pas qu'un contournement : sur le marché visé, WhatsApp atteint un
-locataire plus sûrement qu'une adresse e-mail qu'il consulte rarement.
+collaborateur plus sûrement qu'une adresse e-mail qu'il consulte rarement.
 
 Reste tributaire d'un envoi : **la réinitialisation de mot de passe en
 libre-service** (`/forgot-password`). Sans SMTP, un utilisateur qui a perdu
 son mot de passe doit passer par son gestionnaire, qui lui régénère un lien
-depuis la fiche locataire. C'est acceptable pour un lancement, pas à
+depuis l'écran Équipe. C'est acceptable pour un lancement, pas à
 l'échelle — d'où le raccordement recommandé.
 
 Pour réactiver la confirmation d'e-mail à l'inscription une fois le SMTP en
@@ -91,7 +88,7 @@ attendu et son échec est ignoré — une supervision qui ralentit ou casse la
 production qu'elle observe serait un mauvais marché.
 
 Seuls des identifiants circulent : jamais un nom, une adresse ou le contenu
-d'un document. Vérifié par un test.
+d'une pièce. Vérifié par un test.
 
 ### Accessibilité — vérifiée par un outil
 
@@ -99,7 +96,7 @@ d'un document. Vérifié par un test.
 npx playwright test e2e/accessibility.spec.ts
 ```
 
-axe-core inspecte dix-sept écrans — publics et back-office peuplé —, en
+axe-core inspecte les écrans — publics et back-office peuplé —, en
 mobile et en desktop, contre les critères WCAG 2.1 niveau AA.
 
 À savoir : axe couvre environ un tiers des critères. Zéro violation
@@ -121,11 +118,11 @@ que pour repartir d'une base vide.
 Le déclencheur `profiles_guard_columns` ferme une **escalade de
 privilèges**. Le RLS raisonne par lignes et jamais par colonnes : la policy
 `profiles_update`, qui autorise chacun à corriger son propre nom,
-autorisait du même geste `role` et `tenant_id`. N'importe quel compte —
-locataire compris — pouvait exécuter contre l'API publique :
+autorisait du même geste `role`. N'importe quel compte pouvait exécuter
+contre l'API publique :
 
 ```sql
-UPDATE profiles SET role = 'owner', tenant_id = NULL WHERE id = auth.uid();
+UPDATE profiles SET role = 'owner' WHERE id = auth.uid();
 ```
 
 et devenir propriétaire de l'organisation qui l'héberge. Aucun écran ne
@@ -138,7 +135,7 @@ Vérifiable en une commande, avant et après :
 npm run verify:rls
 ```
 
-Trois assertions de la section « ESCALADE DE PRIVILÈGES » échouent sur un
+Les assertions de la section « ESCALADE DE PRIVILÈGES » échouent sur un
 schéma non corrigé. La même exécution vérifie qu'un propriétaire promeut
 toujours ses collaborateurs — corriger la faille sans casser la gestion
 d'équipe.
@@ -147,15 +144,7 @@ d'équipe.
 
 - la garde du trigger d'audit, sans laquelle **une organisation ne peut pas
   être supprimée** (clôture de compte, effacement à la demande) ;
-- `is_staff()` sur `rent_payments_write`, qui empêche un compte locataire
-  promu « comptable » d'écrire en caisse ;
-- les fonctions qualifiées `public.` dans les policies Storage, sans
-  lesquelles un locataire ne peut pas télécharger sa quittance ;
-- le `WITH CHECK` de `tenants_self_update`, qui épingle l'organisation : un
-  locataire ne déplace pas sa fiche vers un portefeuille voisin ;
-- la colonne `profiles.muted_notifications`, sans laquelle les préférences
-  de notification restent sans effet (l'écran fonctionne, mais rien n'est
-  enregistré).
+- les fonctions qualifiées `public.` dans les policies ;
 
 ---
 
@@ -164,9 +153,9 @@ d'équipe.
 Dans cet ordre. Les trois premières se lancent en ligne de commande.
 
 ```
-npm run test          # 73 tests : validation, pagination, loyers, CSV, supervision
-npm run verify:rls    # 26 assertions : cloisonnement et escalade de privilèges
-npm run test:e2e      # 36 vérifications : parcours complet + WCAG AA, mobile et desktop
+npm run test          # validation, montant en lettres, pagination, CSV, supervision
+npm run verify:rls    # cloisonnement et escalade de privilèges
+npm run test:e2e      # parcours complet + WCAG AA, mobile et desktop
 ```
 
 `verify:rls` et `test:e2e` **écrivent en base** et nettoient derrière eux :
@@ -179,68 +168,41 @@ Puis, sur le déploiement lui-même :
       n'est pas posé : c'est attendu, rien n'est bloqué.
 - [ ] Créer un compte sur `/signup` : l'onboarding s'ouvre immédiatement,
       sans passer par une boîte mail.
-- [ ] Créer immeuble → logement → locataire → bail, en laissant cochée la
-      génération des échéances.
-- [ ] Depuis **Locataires**, « Ouvrir l'accès » : un lien d'activation
+- [ ] Renseigner l'en-tête imprimé (raison sociale, activités, coordonnées).
+- [ ] Émettre un reçu : vérifier le numéro `REC-AAAA-0001`, le montant en
+      toutes lettres, et l'aperçu d'impression qui reproduit l'en-tête.
+- [ ] Émettre un bon de caisse (entrée, puis sortie) et un bon de sortie :
+      vérifier la numérotation continue et les gabarits d'impression.
+- [ ] Inviter un collaborateur depuis **Équipe** : un lien d'activation
       s'affiche. Vérifier qu'il porte **votre** domaine, pas celui de
       Supabase, et qu'il ouvre l'écran « Bienvenue » dans une autre fenêtre.
-- [ ] Le locataire se connecte : il voit son bail, pas ceux des autres.
-- [ ] Il déclare un règlement ; le gestionnaire le voit en tête de
-      `/payments` et l'encaisse.
-- [ ] Clôturer le bail : le logement repasse en « Libre ».
-- [ ] Sur `/payments`, « Exporter en CSV » : le fichier s'ouvre dans Excel
-      avec des accents corrects, des colonnes séparées, et des montants sur
-      lesquels une somme fonctionne.
-- [ ] Sur `/settings`, renommer l'organisation et changer son mot de passe.
-- [ ] Ouvrir le produit **sur un téléphone**, pas en simulation.
+- [ ] Le collaborateur se connecte : il voit les pièces de l'organisation,
+      pas celles d'une autre.
+- [ ] Exporter les reçus en CSV : le fichier s'ouvre directement dans Excel
+      francophone, colonnes et accents intacts.
+- [ ] Consulter `/audit` en tant que propriétaire : chaque création de pièce
+      est journalisée avec l'acteur, l'avant, l'après et l'adresse IP.
+- [ ] Tenter de supprimer une pièce en tant que caissier : refusé. En tant
+      que gestionnaire : accepté, et le trou reste visible en audit.
 
 ---
 
 ## 5. Ce qui n'est pas couvert
 
-À lire avant de promettre quoi que ce soit à un client.
+État des lieux honnête plutôt que checklist entièrement cochée.
 
-**Chaîne e-mail non éprouvée automatiquement.** `e2e/signup.spec.ts` existe
-mais reste désactivé : sans SMTP, il échouerait pour un quota et non pour
-une régression. Une fois le fournisseur raccordé :
-
-```
-E2E_EMAIL_ENABLED=1 E2E_EMAIL_DOMAIN=votredomaine.fr npm run test:e2e
-```
-
-Le parcours d'activation d'un locataire, lui, **est** couvert : le test
-principal génère le lien depuis l'écran, vide les cookies, l'ouvre comme le
-ferait le locataire, et vérifie qu'il atterrit sur son espace et nulle part
-ailleurs.
-
-**Pas de paiement en ligne.** Le locataire déclare son règlement, un
-gestionnaire le valide. Une déclaration n'est jamais un encaissement tant
-qu'elle n'est pas validée.
-
-**Notifications dans l'application seulement.** Ni e-mail ni push. Un
-locataire qui n'ouvre pas le portail n'apprend rien.
-
-**Pas de relance automatique des impayés.** Les retards sont calculés et
-affichés, jamais notifiés d'eux-mêmes : il y faudrait une tâche planifiée.
-
-**Quittances imprimées depuis le navigateur**, non générées en PDF côté
-serveur. La mise en page dépend du navigateur du locataire, et les mentions
-obligatoires n'ont pas été vérifiées contre le droit applicable.
-
-**Volet juridique entièrement à faire** : mentions légales, CGU/CGV,
-politique de confidentialité, registre RGPD, accord de sous-traitance avec
-Supabase. Ce n'est pas du code, et cela conditionne la vente.
-
-**Accessibilité non auditée.** Les cibles tactiles, le contraste et les
-libellés ont été traités par construction ; aucun audit outillé WCAG AA n'a
-été passé.
-
-**Quota d'authentification.** Supabase limite les appels de vérification
-de jeton. Le produit en consomme désormais un par affichage de page
-protégée (contre deux auparavant), mais une campagne de tests répétée
-épuise le quota et provoque des `429 over_request_rate_limit`. Après un
-enchaînement de `npm run test:e2e`, laisser le quota se reconstituer avant
-de conclure à une régression.
-
-**Sauvegardes non vérifiées.** Supabase en assure selon le forfait ; aucune
-restauration n'a été testée.
+- **Pas de facturation de l'abonnement** : la page de tarifs affiche un
+  prix, mais rien ne le perçoit. L'inscription est libre et gratuite.
+- **Pas de portail tiers** : CaisseOps est l'outil de l'entreprise, pas un
+  portail pour des clients ou des chauffeurs. Les pièces s'impriment et se
+  remettent en main propre.
+- **Pièces imprimées depuis le navigateur** plutôt que générées en PDF côté
+  serveur : suffisant à l'usage, mais la mise en page dépend du navigateur
+  de l'opérateur.
+- **Documents légaux à l'état de projet** : le fond est rédigé, l'identité
+  de l'éditeur reste à compléter et l'ensemble doit être relu par un
+  conseil. Les pages le disent et refusent l'indexation tant que des points
+  subsistent.
+- **Pas d'envoi d'e-mail** : ni inscription, ni invitation, ni notification.
+  Seule la réinitialisation de mot de passe en libre-service en dépend,
+  et exige un SMTP raccordé.

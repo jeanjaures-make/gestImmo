@@ -19,7 +19,7 @@ export const dynamic = "force-dynamic";
  * PostgREST plafonne le nombre de lignes par réponse. Une requête unique
  * rendrait donc un fichier tronqué — silencieusement, ce qui est le pire
  * cas pour un export comptable : rien ne distingue « il n'y a que 1 000
- * paiements » de « on vous en a caché 4 000 ». On boucle jusqu'à épuisement
+ * reçus » de « on vous en a caché 4 000 ». On boucle jusqu'à épuisement
  * et le nombre de lignes est annoncé dans un en-tête de réponse.
  */
 const CHUNK = 1000;
@@ -52,101 +52,95 @@ const num = (v: unknown) => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
-/** Suit une relation renvoyée par PostgREST, qui peut être objet ou tableau. */
-function rel(row: Record<string, unknown>, key: string): Record<string, unknown> {
-  const value = row[key];
-  if (Array.isArray(value)) return (value[0] ?? {}) as Record<string, unknown>;
-  return (value ?? {}) as Record<string, unknown>;
+/** Les lignes d'un bon de sortie, telles que PostgREST les imbrique. */
+function lines(row: Record<string, unknown>): Record<string, unknown>[] {
+  const value = row.delivery_note_lines;
+  return Array.isArray(value) ? (value as Record<string, unknown>[]) : [];
 }
 
 const DATASETS: Record<string, Dataset> = {
-  paiements: {
-    table: "rent_payments",
+  recus: {
+    table: "receipts",
     select:
-      "month, amount, amount_paid, status, payment_date, method, note, leases(tenants(firstname, lastname), apartments(number, buildings(name)))",
-    orderBy: "month",
+      "number, issued_on, payer, amount, advance, balance, articles, issued_by, created_at",
+    orderBy: "issued_on",
     ascending: false,
     columns: [
-      { header: "Mois", value: (r) => str(r.month) },
-      {
-        header: "Locataire",
-        value: (r) => {
-          const t = rel(rel(r, "leases"), "tenants");
-          return `${str(t.firstname)} ${str(t.lastname)}`.trim();
-        },
-      },
-      {
-        header: "Immeuble",
-        value: (r) =>
-          str(rel(rel(rel(r, "leases"), "apartments"), "buildings").name),
-      },
-      {
-        header: "Logement",
-        value: (r) => str(rel(rel(r, "leases"), "apartments").number),
-      },
-      { header: "Dû", value: (r) => num(r.amount) },
-      { header: "Encaissé", value: (r) => num(r.amount_paid) },
-      { header: "Statut", value: (r) => str(r.status) },
-      { header: "Réglé le", value: (r) => str(r.payment_date) },
-      { header: "Moyen", value: (r) => str(r.method) },
-      { header: "Note", value: (r) => str(r.note) },
-    ],
-  },
-
-  depenses: {
-    table: "expenses",
-    select: "expense_date, label, category, amount, buildings(name)",
-    orderBy: "expense_date",
-    ascending: false,
-    columns: [
-      { header: "Date", value: (r) => str(r.expense_date) },
-      { header: "Libellé", value: (r) => str(r.label) },
-      { header: "Catégorie", value: (r) => str(r.category) },
+      { header: "Numéro", value: (r) => str(r.number) },
+      { header: "Date", value: (r) => str(r.issued_on) },
+      { header: "Reçu de", value: (r) => str(r.payer) },
       { header: "Montant", value: (r) => num(r.amount) },
-      { header: "Immeuble", value: (r) => str(rel(r, "buildings").name) },
+      { header: "Avance", value: (r) => num(r.advance) },
+      { header: "Reste", value: (r) => num(r.balance) },
+      { header: "Article(s)", value: (r) => str(r.articles) },
+      { header: "Établi par", value: (r) => str(r.issued_by) },
+      { header: "Émis le", value: (r) => str(r.created_at).slice(0, 10) },
     ],
   },
 
-  locataires: {
-    table: "tenants",
-    select: "lastname, firstname, email, phone, identity_number, created_at",
-    orderBy: "lastname",
-    ascending: true,
-    columns: [
-      { header: "Nom", value: (r) => str(r.lastname) },
-      { header: "Prénom", value: (r) => str(r.firstname) },
-      { header: "E-mail", value: (r) => str(r.email) },
-      { header: "Téléphone", value: (r) => str(r.phone) },
-      { header: "Pièce d'identité", value: (r) => str(r.identity_number) },
-      { header: "Fiche créée le", value: (r) => str(r.created_at).slice(0, 10) },
-    ],
-  },
-
-  baux: {
-    table: "leases",
+  "bons-de-caisse": {
+    table: "cash_vouchers",
     select:
-      "start_date, end_date, rent, charges, deposit, status, tenants(firstname, lastname), apartments(number, buildings(name))",
-    orderBy: "start_date",
+      "number, issued_on, direction, counterparty, amount, advance, balance, reason, ordered_by, settlement, deposit_ref, account, created_at",
+    orderBy: "issued_on",
     ascending: false,
     columns: [
+      { header: "Numéro", value: (r) => str(r.number) },
+      { header: "Date", value: (r) => str(r.issued_on) },
+      { header: "Sens", value: (r) => str(r.direction) },
+      { header: "Bénéficiaire", value: (r) => str(r.counterparty) },
+      { header: "Montant", value: (r) => num(r.amount) },
+      { header: "Avance", value: (r) => num(r.advance) },
+      { header: "Reste", value: (r) => num(r.balance) },
+      { header: "Motif", value: (r) => str(r.reason) },
+      { header: "Ordre donné par", value: (r) => str(r.ordered_by) },
+      { header: "Règlement", value: (r) => str(r.settlement) },
+      { header: "Référence du dépôt", value: (r) => str(r.deposit_ref) },
+      { header: "Imputation", value: (r) => str(r.account) },
+      { header: "Émis le", value: (r) => str(r.created_at).slice(0, 10) },
+    ],
+  },
+
+  // Une ligne par bon, et non par article : le fichier suit la pièce telle
+  // qu'elle a été remise. Les articles y tiennent en une cellule, séparés
+  // par des points-virgules — un tableur les redécoupe si besoin.
+  "bons-de-sortie": {
+    table: "delivery_notes",
+    select:
+      "number, issued_on, issuer, service, nota, created_at, delivery_note_lines(position, designation, quantity, destination, observations)",
+    orderBy: "issued_on",
+    ascending: false,
+    columns: [
+      { header: "Numéro", value: (r) => str(r.number) },
+      { header: "Date", value: (r) => str(r.issued_on) },
+      { header: "Émetteur", value: (r) => str(r.issuer) },
+      { header: "Service", value: (r) => str(r.service) },
+      { header: "Nombre d'articles", value: (r) => lines(r).length },
       {
-        header: "Locataire",
-        value: (r) => {
-          const t = rel(r, "tenants");
-          return `${str(t.firstname)} ${str(t.lastname)}`.trim();
-        },
+        header: "Articles",
+        value: (r) =>
+          lines(r)
+            .sort((a, b) => Number(a.position) - Number(b.position))
+            .map((line) =>
+              [str(line.designation), str(line.quantity)]
+                .filter(Boolean)
+                .join(" × "),
+            )
+            .join(" ; "),
       },
       {
-        header: "Immeuble",
-        value: (r) => str(rel(rel(r, "apartments"), "buildings").name),
+        header: "Destinations",
+        value: (r) =>
+          [
+            ...new Set(
+              lines(r)
+                .map((line) => str(line.destination))
+                .filter(Boolean),
+            ),
+          ].join(" ; "),
       },
-      { header: "Logement", value: (r) => str(rel(r, "apartments").number) },
-      { header: "Début", value: (r) => str(r.start_date) },
-      { header: "Fin", value: (r) => str(r.end_date) },
-      { header: "Loyer", value: (r) => num(r.rent) },
-      { header: "Charges", value: (r) => num(r.charges) },
-      { header: "Dépôt de garantie", value: (r) => num(r.deposit) },
-      { header: "Statut", value: (r) => str(r.status) },
+      { header: "Nota", value: (r) => str(r.nota) },
+      { header: "Émis le", value: (r) => str(r.created_at).slice(0, 10) },
     ],
   },
 };

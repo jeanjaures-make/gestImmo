@@ -5,7 +5,6 @@ import { revalidatePath } from "next/cache";
 
 import { authorize, requireSession } from "@/lib/auth";
 import { LOGO_MAX_BYTES, LOGO_TYPES } from "@/lib/logo";
-import { NOTIFICATION_PREFERENCES } from "@/lib/notifications";
 import { reportError } from "@/lib/observability";
 import { callerKey, rateLimit } from "@/lib/rate-limit";
 import { createClient } from "@/lib/supabase/server";
@@ -29,8 +28,8 @@ export async function updateProfile(
   if (!parsed.success) return { error: firstIssue(parsed.error) };
 
   const supabase = await createClient();
-  // Seuls `firstname` et `lastname` partent : `role` et `tenant_id` sont de
-  // toute façon refusés par le déclencheur `profiles_guard_columns`.
+  // Seuls `firstname` et `lastname` partent : `role` est de
+  // toute façon refusé par le déclencheur `profiles_guard_columns`.
   const { error } = await supabase
     .from("profiles")
     .update(parsed.data)
@@ -91,39 +90,6 @@ export async function changePassword(
 }
 
 /**
- * Types de notification que le compte ne veut plus voir.
- *
- * Les cases cochées désignent ce que l'on GARDE : c'est le sens naturel
- * d'une case à cocher, et l'inverse — cocher pour couper — se lit de
- * travers une fois sur deux. On enregistre donc le complément.
- */
-export async function updateNotificationPreferences(
-  _prev: FormState,
-  formData: FormData,
-): Promise<FormState> {
-  const session = await requireSession();
-
-  const gardés = new Set(formData.getAll("kinds").map(String));
-  const mutés = NOTIFICATION_PREFERENCES.map((p) => p.kind).filter(
-    (kind) => !gardés.has(kind),
-  );
-
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from("profiles")
-    .update({ muted_notifications: mutés })
-    .eq("id", session.userId);
-
-  if (error) return { error: error.message };
-
-  revalidatePath("/settings");
-  // La pastille du bandeau vit dans le layout : sans cela, elle continuerait
-  // d'annoncer des notifications qu'on vient de couper.
-  revalidatePath("/", "layout");
-  return { ok: true };
-}
-
-/**
  * Ferme toutes les sessions, y compris celles d'autres appareils.
  *
  * `scope: "global"` révoque tous les jetons de rafraîchissement du compte.
@@ -140,7 +106,14 @@ export async function signOutEverywhere(): Promise<void> {
   redirect("/login?deconnexion=globale");
 }
 
-/** Nom et logo de l'organisation. Réservé au propriétaire. */
+/**
+ * En-tête imprimé de l'entreprise. Réservé au propriétaire.
+ *
+ * Ce n'est pas un réglage cosmétique : ces champs constituent l'identité
+ * qui figure sur chaque pièce remise à un tiers. Les confier au premier
+ * gestionnaire venu reviendrait à laisser modifier l'adresse et le
+ * numéro de téléphone auxquels les clients répondront.
+ */
 export async function updateOrganization(
   _prev: FormState,
   formData: FormData,
@@ -158,12 +131,12 @@ export async function updateOrganization(
 
   const { error } = await supabase
     .from("organizations")
-    .update({ name: parsed.data.name })
+    .update(parsed.data)
     .eq("id", orgId);
 
   if (error) return { error: error.message };
 
-  // Le logo est facultatif et son échec ne doit pas annuler le renommage :
+  // Le logo est facultatif et son échec ne doit pas annuler le reste :
   // on le signale sans perdre ce qui a déjà été enregistré.
   const logoError = await replaceLogo(formData.get("logo"), orgId);
 

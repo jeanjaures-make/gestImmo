@@ -23,7 +23,7 @@ import {
  */
 
 export type ErrorContext = {
-  /** Où l'erreur s'est produite : « portal-access », « review-declaration ». */
+  /** Où l'erreur s'est produite : « invite-member », « export-csv ». */
   scope: string;
   /** Identifiant d'organisation ou d'utilisateur — jamais de donnée nominative. */
   organizationId?: string;

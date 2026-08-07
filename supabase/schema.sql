@@ -1,9 +1,9 @@
 -- =====================================================================
--- ImmoOps — Schéma V2 : plateforme multi-tenant par organisation
+-- CaisseOps — Schéma : reçus, bons de caisse et bons de sortie
 --
 -- À exécuter dans l'éditeur SQL de Supabase.
--- Si vous aviez déjà exécuté la V1 (modèle owner_id), lancez d'abord
--- `supabase/reset.sql` — la V1 et la V2 sont incompatibles.
+-- Si vous aviez exécuté un schéma antérieur (gestion immobilière),
+-- lancez d'abord `supabase/reset.sql` : les deux sont incompatibles.
 --
 -- Principes structurants :
 --   1. `organization_id` sur TOUTES les tables métier.
@@ -13,6 +13,8 @@
 --      applicative, c'est une contrainte PostgreSQL.
 --   3. RLS activé partout, avec des droits d'écriture par rôle.
 --   4. Tout écrit métier est journalisé dans `audit_logs` par trigger.
+--   5. L'en-tête imprimé (logo, raison sociale, activités, coordonnées)
+--      appartient à l'organisation : chaque entreprise imprime le sien.
 -- =====================================================================
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -24,36 +26,24 @@ DO $$ BEGIN
   CREATE TYPE user_role AS ENUM ('owner', 'manager', 'accountant', 'viewer');
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
+-- Sens du mouvement d'un bon de caisse : de l'argent entre, ou il sort.
 DO $$ BEGIN
-  CREATE TYPE apartment_status AS ENUM ('vacant', 'occupied', 'maintenance');
+  CREATE TYPE cash_direction AS ENUM ('entree', 'sortie');
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
+-- Mode de règlement : espèces en main, ou dépôt (banque, mobile money).
 DO $$ BEGIN
-  CREATE TYPE lease_status AS ENUM ('draft', 'active', 'ended', 'terminated');
+  CREATE TYPE cash_settlement AS ENUM ('cash', 'depot');
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
+-- Le mouvement est-il imputé à une personne ou à l'entreprise ?
 DO $$ BEGIN
-  CREATE TYPE payment_status AS ENUM ('pending', 'paid', 'partial', 'late');
+  CREATE TYPE cash_account AS ENUM ('personal', 'company');
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
+-- Les trois pièces émises. Sert de clé de numérotation.
 DO $$ BEGIN
-  CREATE TYPE maintenance_priority AS ENUM ('low', 'medium', 'high', 'urgent');
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-
-DO $$ BEGIN
-  CREATE TYPE maintenance_status AS ENUM ('open', 'in_progress', 'resolved', 'cancelled');
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-
-DO $$ BEGIN
-  CREATE TYPE document_owner_type AS ENUM ('organization', 'building', 'apartment', 'tenant', 'lease', 'expense');
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-
-DO $$ BEGIN
-  CREATE TYPE document_visibility AS ENUM ('private', 'organization');
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-
-DO $$ BEGIN
-  CREATE TYPE expense_category AS ENUM ('maintenance', 'taxes', 'insurance', 'utilities', 'management', 'works', 'other');
+  CREATE TYPE document_kind AS ENUM ('receipt', 'cash_voucher', 'delivery_note');
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- =====================================================================
@@ -61,6 +51,11 @@ EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 -- =====================================================================
 
 -- --------------------------------------------------------------- ORGS
+--
+-- Les colonnes d'en-tête décrivent l'entreprise telle qu'elle apparaît
+-- en haut de ses pièces imprimées. Toutes sont facultatives : une
+-- organisation qui vient de s'inscrire imprime déjà, avec son seul nom,
+-- et complète ensuite.
 CREATE TABLE IF NOT EXISTS organizations (
   id         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   name       TEXT NOT NULL CHECK (length(trim(name)) > 0),
@@ -68,6 +63,22 @@ CREATE TABLE IF NOT EXISTS organizations (
   logo_url   TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE organizations
+  -- « S.A.R.L. », « S.A. », « Entreprise individuelle »… imprimé à côté du nom.
+  ADD COLUMN IF NOT EXISTS legal_form  TEXT,
+  -- Sous-titre de la raison sociale : « Société de travaux industriels… ».
+  ADD COLUMN IF NOT EXISTS trade_name  TEXT,
+  -- Accroche commerciale : « Votre domaine, notre expertise. »
+  ADD COLUMN IF NOT EXISTS tagline     TEXT,
+  -- Domaines d'activité, un par puce dans l'en-tête.
+  ADD COLUMN IF NOT EXISTS activities  TEXT[] NOT NULL DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS address     TEXT,
+  ADD COLUMN IF NOT EXISTS phone       TEXT,
+  ADD COLUMN IF NOT EXISTS phone_alt   TEXT,
+  ADD COLUMN IF NOT EXISTS email       TEXT,
+  ADD COLUMN IF NOT EXISTS email_alt   TEXT,
+  ADD COLUMN IF NOT EXISTS website     TEXT;
 
 -- ----------------------------------------------------------- PROFILES
 CREATE TABLE IF NOT EXISTS profiles (
@@ -83,198 +94,122 @@ CREATE TABLE IF NOT EXISTS profiles (
 
 CREATE INDEX IF NOT EXISTS profiles_organization_id_idx ON profiles (organization_id);
 
--- Types de notification que ce compte ne veut plus voir.
+-- ------------------------------------------------------------ RECEIPTS
 --
--- Le filtrage a lieu à la LECTURE, pas à l'écriture : la notification est
--- créée quoi qu'il arrive. Un gestionnaire qui remet un type en marche
--- retrouve alors son historique, au lieu d'un trou correspondant à la
--- période où il l'avait coupé. Le coût de stockage est négligeable, la
--- perte d'information ne l'est pas.
-ALTER TABLE profiles
-  ADD COLUMN IF NOT EXISTS muted_notifications TEXT[] NOT NULL DEFAULT '{}';
-
--- ---------------------------------------------------------- BUILDINGS
-CREATE TABLE IF NOT EXISTS buildings (
+-- Le reçu : la pièce la plus simple. On a reçu une somme de quelqu'un,
+-- pour quelque chose, et on lui en laisse la trace.
+--
+-- `amount_in_words` est stocké et non recalculé à l'affichage : c'est la
+-- mention qui fait foi sur le papier. Recalculée plus tard par une autre
+-- version du convertisseur, une pièce déjà remise pourrait se relire
+-- différemment de l'exemplaire détenu par le client.
+CREATE TABLE IF NOT EXISTS receipts (
   id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-  name            TEXT NOT NULL,
-  address         TEXT NOT NULL,
-  city            TEXT NOT NULL,
-  country         TEXT NOT NULL DEFAULT 'France',
-  photo           TEXT,
-  -- Alimente le KPI « valeur estimée du patrimoine » et le rendement locatif.
-  estimated_value NUMERIC(14, 2) CHECK (estimated_value IS NULL OR estimated_value >= 0),
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  -- Cible des clés étrangères composites : voir le commentaire d'en-tête.
-  UNIQUE (id, organization_id)
-);
-
-CREATE INDEX IF NOT EXISTS buildings_organization_id_idx ON buildings (organization_id);
-
--- --------------------------------------------------------- APARTMENTS
-CREATE TABLE IF NOT EXISTS apartments (
-  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-  building_id     UUID NOT NULL,
   number          TEXT NOT NULL,
-  floor           TEXT,
-  surface         NUMERIC(10, 2) CHECK (surface IS NULL OR surface > 0),
-  type            TEXT,
-  status          apartment_status NOT NULL DEFAULT 'vacant',
+  issued_on       DATE NOT NULL DEFAULT CURRENT_DATE,
+  -- « Reçu de M./Mme »
+  payer           TEXT NOT NULL CHECK (length(trim(payer)) > 0),
+  -- Le montant du cadre « BPF » (bon pour francs).
+  amount          NUMERIC(14, 2) NOT NULL CHECK (amount >= 0),
+  amount_in_words TEXT NOT NULL DEFAULT '',
+  -- « Article(s) » : l'objet du règlement.
+  articles        TEXT NOT NULL DEFAULT '',
+  advance         NUMERIC(14, 2) NOT NULL DEFAULT 0 CHECK (advance >= 0),
+  balance         NUMERIC(14, 2) NOT NULL DEFAULT 0 CHECK (balance >= 0),
+  -- « Reçu établi par »
+  issued_by       TEXT NOT NULL DEFAULT '',
+  created_by      UUID REFERENCES profiles(id) ON DELETE SET NULL,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (id, organization_id),
-  -- Un logement ne peut pointer que vers un immeuble de SA propre organisation.
-  FOREIGN KEY (building_id, organization_id)
-    REFERENCES buildings (id, organization_id) ON DELETE CASCADE,
-  -- Contrainte métier : numéro unique par immeuble.
-  UNIQUE (building_id, number)
+  UNIQUE (organization_id, number)
 );
 
-CREATE INDEX IF NOT EXISTS apartments_organization_id_idx ON apartments (organization_id);
-CREATE INDEX IF NOT EXISTS apartments_building_id_idx ON apartments (building_id);
+CREATE INDEX IF NOT EXISTS receipts_organization_idx
+  ON receipts (organization_id, issued_on DESC);
 
--- ------------------------------------------------------------ TENANTS
-CREATE TABLE IF NOT EXISTS tenants (
-  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-  firstname       TEXT NOT NULL,
-  lastname        TEXT NOT NULL,
-  phone           TEXT,
-  email           TEXT,
-  identity_number TEXT,
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE (id, organization_id)
-);
-
-CREATE INDEX IF NOT EXISTS tenants_organization_id_idx ON tenants (organization_id);
-
--- Un locataire peut disposer d'un compte pour accéder à son espace privé.
--- Le lien est porté par `profiles` et non par `tenants` : un locataire sans
--- compte reste parfaitement gérable, c'est le cas le plus courant.
+-- ------------------------------------------------------- CASH VOUCHERS
 --
--- Choix volontaire : PAS de valeur 'tenant' ajoutée à l'enum `user_role`.
--- `ALTER TYPE ... ADD VALUE` ne peut pas être suivi d'un usage de la
--- nouvelle valeur dans la même transaction — ce script deviendrait
--- non rejouable. La présence de `tenant_id` suffit à distinguer un
--- locataire d'un membre du personnel.
-ALTER TABLE profiles
-  ADD COLUMN IF NOT EXISTS tenant_id UUID UNIQUE REFERENCES tenants(id) ON DELETE CASCADE;
-
-CREATE INDEX IF NOT EXISTS profiles_tenant_id_idx ON profiles (tenant_id);
-
--- ------------------------------------------------------------- LEASES
-CREATE TABLE IF NOT EXISTS leases (
+-- Le bon de caisse : une entrée ou une sortie d'argent, avec l'ordre qui
+-- l'a autorisée et l'imputation (compte personnel ou compte entreprise).
+CREATE TABLE IF NOT EXISTS cash_vouchers (
   id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-  tenant_id       UUID NOT NULL,
-  apartment_id    UUID NOT NULL,
-  rent            NUMERIC(12, 2) NOT NULL CHECK (rent >= 0),
-  charges         NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (charges >= 0),
-  deposit         NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (deposit >= 0),
-  status          lease_status NOT NULL DEFAULT 'active',
-  start_date      DATE NOT NULL,
-  end_date        DATE,
+  number          TEXT NOT NULL,
+  issued_on       DATE NOT NULL DEFAULT CURRENT_DATE,
+  direction       cash_direction NOT NULL DEFAULT 'sortie',
+  amount          NUMERIC(14, 2) NOT NULL CHECK (amount >= 0),
+  amount_in_words TEXT NOT NULL DEFAULT '',
+  -- « REÇU de Mr ou Mme »
+  counterparty    TEXT NOT NULL CHECK (length(trim(counterparty)) > 0),
+  -- « Motif »
+  reason          TEXT NOT NULL DEFAULT '',
+  advance         NUMERIC(14, 2) NOT NULL DEFAULT 0 CHECK (advance >= 0),
+  balance         NUMERIC(14, 2) NOT NULL DEFAULT 0 CHECK (balance >= 0),
+  -- « ORDRE DONNÉ PAR »
+  ordered_by      TEXT NOT NULL DEFAULT '',
+  settlement      cash_settlement NOT NULL DEFAULT 'cash',
+  -- Référence du dépôt : n'a de sens que si settlement = 'depot'.
+  deposit_ref     TEXT,
+  account         cash_account NOT NULL DEFAULT 'company',
+  created_by      UUID REFERENCES profiles(id) ON DELETE SET NULL,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (id, organization_id),
-  FOREIGN KEY (tenant_id, organization_id)
-    REFERENCES tenants (id, organization_id) ON DELETE CASCADE,
-  FOREIGN KEY (apartment_id, organization_id)
-    REFERENCES apartments (id, organization_id) ON DELETE CASCADE,
-  CONSTRAINT leases_dates_check CHECK (end_date IS NULL OR end_date > start_date)
+  UNIQUE (organization_id, number),
+  -- Une référence de dépôt sans dépôt est une donnée orpheline : elle
+  -- s'imprimerait à côté d'une case « CASH » cochée.
+  CONSTRAINT cash_vouchers_deposit_ref_requires_depot
+    CHECK (settlement = 'depot' OR deposit_ref IS NULL)
 );
 
-CREATE INDEX IF NOT EXISTS leases_organization_id_idx ON leases (organization_id);
-CREATE INDEX IF NOT EXISTS leases_tenant_id_idx ON leases (tenant_id);
-CREATE INDEX IF NOT EXISTS leases_apartment_id_idx ON leases (apartment_id);
+CREATE INDEX IF NOT EXISTS cash_vouchers_organization_idx
+  ON cash_vouchers (organization_id, issued_on DESC);
 
--- Contrainte métier : un seul bail actif par logement.
-CREATE UNIQUE INDEX IF NOT EXISTS leases_one_active_per_apartment
-  ON leases (apartment_id) WHERE status = 'active';
-
--- ------------------------------------------------------ RENT PAYMENTS
-CREATE TABLE IF NOT EXISTS rent_payments (
+-- ------------------------------------------------------ DELIVERY NOTES
+--
+-- Le bon de sortie : ce qui quitte le magasin, en quelle quantité et
+-- pour quelle destination. Les articles vivent dans une table de lignes
+-- plutôt que dans un tableau JSON : on veut pouvoir les compter, les
+-- exporter et les retrouver.
+CREATE TABLE IF NOT EXISTS delivery_notes (
   id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-  lease_id        UUID NOT NULL,
-  -- Toujours normalisé au 1er du mois par un trigger : une échéance = un mois.
-  month           DATE NOT NULL,
-  amount          NUMERIC(12, 2) NOT NULL CHECK (amount >= 0),
-  amount_paid     NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (amount_paid >= 0),
-  status          payment_status NOT NULL DEFAULT 'pending',
-  payment_date    DATE,
-  method          TEXT,
-  note            TEXT,
+  number          TEXT NOT NULL,
+  issued_on       DATE NOT NULL DEFAULT CURRENT_DATE,
+  -- « NOM ÉMETTEUR »
+  issuer          TEXT NOT NULL CHECK (length(trim(issuer)) > 0),
+  service         TEXT NOT NULL DEFAULT '',
+  -- « NOTA » : mention de pied, « Exemplaire chauffeur » par défaut.
+  nota            TEXT NOT NULL DEFAULT '',
+  created_by      UUID REFERENCES profiles(id) ON DELETE SET NULL,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (id, organization_id),
-  FOREIGN KEY (lease_id, organization_id)
-    REFERENCES leases (id, organization_id) ON DELETE CASCADE,
-  UNIQUE (lease_id, month)
+  UNIQUE (organization_id, number)
 );
 
-CREATE INDEX IF NOT EXISTS rent_payments_organization_id_idx ON rent_payments (organization_id);
-CREATE INDEX IF NOT EXISTS rent_payments_lease_id_idx ON rent_payments (lease_id);
-CREATE INDEX IF NOT EXISTS rent_payments_month_idx ON rent_payments (organization_id, month);
+CREATE INDEX IF NOT EXISTS delivery_notes_organization_idx
+  ON delivery_notes (organization_id, issued_on DESC);
 
--- ----------------------------------------------------------- EXPENSES
-CREATE TABLE IF NOT EXISTS expenses (
-  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-  building_id     UUID NOT NULL,
-  category        expense_category NOT NULL DEFAULT 'other',
-  label           TEXT NOT NULL,
-  amount          NUMERIC(12, 2) NOT NULL CHECK (amount >= 0),
-  expense_date    DATE NOT NULL DEFAULT CURRENT_DATE,
-  invoice_path    TEXT,
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+CREATE TABLE IF NOT EXISTS delivery_note_lines (
+  id               UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  organization_id  UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  delivery_note_id UUID NOT NULL,
+  -- Rang d'affichage : l'ordre de saisie est celui du papier.
+  position         INT NOT NULL DEFAULT 0,
+  designation      TEXT NOT NULL CHECK (length(trim(designation)) > 0),
+  quantity         TEXT NOT NULL DEFAULT '',
+  destination      TEXT NOT NULL DEFAULT '',
+  observations     TEXT NOT NULL DEFAULT '',
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (id, organization_id),
-  FOREIGN KEY (building_id, organization_id)
-    REFERENCES buildings (id, organization_id) ON DELETE CASCADE
+  -- La clé composite interdit qu'une ligne d'une organisation soit
+  -- rattachée au bon d'une autre.
+  FOREIGN KEY (delivery_note_id, organization_id)
+    REFERENCES delivery_notes (id, organization_id) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS expenses_organization_id_idx ON expenses (organization_id);
-CREATE INDEX IF NOT EXISTS expenses_date_idx ON expenses (organization_id, expense_date);
-
--- -------------------------------------------------------- MAINTENANCE
-CREATE TABLE IF NOT EXISTS maintenance (
-  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-  building_id     UUID NOT NULL,
-  apartment_id    UUID,
-  title           TEXT NOT NULL,
-  description     TEXT,
-  priority        maintenance_priority NOT NULL DEFAULT 'medium',
-  status          maintenance_status NOT NULL DEFAULT 'open',
-  assigned_to     UUID REFERENCES profiles(id) ON DELETE SET NULL,
-  resolved_at     TIMESTAMPTZ,
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE (id, organization_id),
-  FOREIGN KEY (building_id, organization_id)
-    REFERENCES buildings (id, organization_id) ON DELETE CASCADE,
-  FOREIGN KEY (apartment_id, organization_id)
-    REFERENCES apartments (id, organization_id) ON DELETE SET NULL
-);
-
-CREATE INDEX IF NOT EXISTS maintenance_organization_id_idx ON maintenance (organization_id);
-CREATE INDEX IF NOT EXISTS maintenance_open_idx
-  ON maintenance (organization_id) WHERE status IN ('open', 'in_progress');
-
--- ---------------------------------------------------------- DOCUMENTS
-CREATE TABLE IF NOT EXISTS documents (
-  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-  owner_type      document_owner_type NOT NULL,
-  owner_id        UUID NOT NULL,
-  file_name       TEXT NOT NULL,
-  storage_path    TEXT NOT NULL UNIQUE,
-  mime_type       TEXT,
-  size_bytes      BIGINT,
-  visibility      document_visibility NOT NULL DEFAULT 'organization',
-  uploaded_by     UUID REFERENCES profiles(id) ON DELETE SET NULL,
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS documents_organization_id_idx ON documents (organization_id);
-CREATE INDEX IF NOT EXISTS documents_owner_idx ON documents (organization_id, owner_type, owner_id);
+CREATE INDEX IF NOT EXISTS delivery_note_lines_note_idx
+  ON delivery_note_lines (delivery_note_id, position);
 
 -- --------------------------------------------------------- AUDIT LOGS
 CREATE TABLE IF NOT EXISTS audit_logs (
@@ -287,8 +222,6 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   entity_id       UUID,
   before_data     JSONB,
   after_data      JSONB,
-  -- Liste des colonnes réellement modifiées : permet de filtrer et
-  -- d'afficher un diff sans recalculer côté client.
   changed_fields  TEXT[],
   ip              TEXT,
   user_agent      TEXT,
@@ -315,6 +248,21 @@ CREATE TABLE IF NOT EXISTS login_events (
 
 CREATE INDEX IF NOT EXISTS login_events_user_idx ON login_events (user_id, created_at DESC);
 
+-- ---------------------------------------------------- DOCUMENT NUMBERS
+--
+-- Un compteur par organisation, par nature de pièce et par année.
+--
+-- Une séquence PostgreSQL ne conviendrait pas : elle est globale, alors
+-- que chaque entreprise attend « BC-2026-0001 » pour sa première pièce
+-- de l'année, sans savoir que d'autres entreprises utilisent le produit.
+CREATE TABLE IF NOT EXISTS document_counters (
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  kind            document_kind NOT NULL,
+  year            INT NOT NULL,
+  last_value      INT NOT NULL DEFAULT 0,
+  PRIMARY KEY (organization_id, kind, year)
+);
+
 -- =====================================================================
 -- FONCTIONS D'AIDE (SECURITY DEFINER pour éviter la récursion RLS)
 -- =====================================================================
@@ -333,7 +281,6 @@ AS $$
   SELECT role FROM profiles WHERE id = auth.uid();
 $$;
 
--- Vrai si le rôle courant fait partie de la liste passée.
 CREATE OR REPLACE FUNCTION has_role(VARIADIC allowed user_role[])
 RETURNS BOOLEAN
 LANGUAGE SQL STABLE
@@ -341,120 +288,130 @@ AS $$
   SELECT current_user_role() = ANY(allowed);
 $$;
 
--- ---------------------------------------------------------------------
--- Périmètre LOCATAIRE
---
--- Ces fonctions sont SECURITY DEFINER et renvoient des tableaux d'ids.
--- Écrire les policies avec des sous-requêtes sur `leases` déclencherait
--- l'évaluation en cascade du RLS de chaque table traversée : coûteux, et
--- source de récursion dès qu'une policy en référence une autre.
---
--- ⚠️ Elles renvoient un TABLEAU, pas un ensemble de lignes. On écrit donc
---    `x = ANY (tenant_lease_ids())`  ← comparaison à un tableau
---    et non
---    `x = ANY (SELECT tenant_lease_ids())`  ← sous-requête d'une ligne
--- La seconde forme demande à PostgreSQL de comparer un `uuid` à un
--- `uuid[]` et échoue à la création de la policy :
---   42883 — l'opérateur n'existe pas : uuid = uuid[]
--- Pour parcourir le tableau ligne à ligne, il faut `unnest()` explicite.
--- ---------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION current_tenant_id()
-RETURNS UUID
-LANGUAGE SQL STABLE SECURITY DEFINER SET search_path = public
-AS $$
-  SELECT tenant_id FROM profiles WHERE id = auth.uid();
-$$;
-
--- Membre du personnel = rattaché à une organisation SANS être locataire.
+-- Toute personne rattachée à une organisation. Le produit n'a plus qu'un
+-- seul public — le personnel de l'entreprise — mais la fonction reste :
+-- les policies l'appellent, et une future ouverture à des tiers en
+-- lecture n'aurait qu'à la redéfinir.
 CREATE OR REPLACE FUNCTION is_staff()
 RETURNS BOOLEAN
 LANGUAGE SQL STABLE
 AS $$
-  SELECT current_organization_id() IS NOT NULL
-     AND current_tenant_id() IS NULL;
-$$;
-
-CREATE OR REPLACE FUNCTION tenant_lease_ids()
-RETURNS UUID[]
-LANGUAGE SQL STABLE SECURITY DEFINER SET search_path = public
-AS $$
-  SELECT COALESCE(array_agg(l.id), '{}')
-  FROM leases l
-  WHERE l.tenant_id = current_tenant_id();
-$$;
-
-CREATE OR REPLACE FUNCTION tenant_apartment_ids()
-RETURNS UUID[]
-LANGUAGE SQL STABLE SECURITY DEFINER SET search_path = public
-AS $$
-  SELECT COALESCE(array_agg(DISTINCT l.apartment_id), '{}')
-  FROM leases l
-  WHERE l.tenant_id = current_tenant_id();
-$$;
-
-CREATE OR REPLACE FUNCTION tenant_building_ids()
-RETURNS UUID[]
-LANGUAGE SQL STABLE SECURITY DEFINER SET search_path = public
-AS $$
-  SELECT COALESCE(array_agg(DISTINCT a.building_id), '{}')
-  FROM apartments a
-  WHERE a.id = ANY(tenant_apartment_ids());
+  SELECT current_organization_id() IS NOT NULL;
 $$;
 
 -- =====================================================================
--- TRIGGERS
+-- NUMÉROTATION
 -- =====================================================================
 
--- Normalise une échéance sur le 1er du mois : `UNIQUE (lease_id, month)`
--- n'a de sens que si toutes les dates d'un même mois sont identiques.
-CREATE OR REPLACE FUNCTION normalize_payment_month()
-RETURNS TRIGGER LANGUAGE plpgsql AS $$
+-- Préfixe imprimé devant le numéro, par nature de pièce.
+CREATE OR REPLACE FUNCTION document_prefix(p_kind document_kind)
+RETURNS TEXT
+LANGUAGE SQL IMMUTABLE
+AS $$
+  SELECT CASE p_kind
+    WHEN 'receipt'       THEN 'REC'
+    WHEN 'cash_voucher'  THEN 'BC'
+    WHEN 'delivery_note' THEN 'BS'
+  END;
+$$;
+
+/**
+ * Attribue le numéro suivant, sans trou ni doublon.
+ *
+ * `ON CONFLICT DO UPDATE` verrouille la ligne du compteur : deux
+ * saisies simultanées attendent l'une l'autre au lieu de repartir toutes
+ * deux du même dernier numéro. C'est ce que ne garantirait pas un
+ * `SELECT max(number) + 1`, courant et faux dès le second poste de
+ * saisie.
+ */
+CREATE OR REPLACE FUNCTION next_document_number(
+  p_organization UUID,
+  p_kind         document_kind,
+  p_year         INT
+)
+RETURNS TEXT
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_value INT;
 BEGIN
-  NEW.month := date_trunc('month', NEW.month)::date;
+  INSERT INTO document_counters (organization_id, kind, year, last_value)
+  VALUES (p_organization, p_kind, p_year, 1)
+  ON CONFLICT (organization_id, kind, year) DO UPDATE
+    SET last_value = document_counters.last_value + 1
+  RETURNING last_value INTO v_value;
+
+  RETURN format('%s-%s-%s',
+                document_prefix(p_kind),
+                p_year,
+                lpad(v_value::text, 4, '0'));
+END;
+$$;
+
+/**
+ * Remplit le numéro à l'insertion.
+ *
+ * Le numéro n'est pas demandé au formulaire : le faire saisir revient à
+ * laisser deux postes émettre le même. Le déclencheur ignore d'ailleurs
+ * toute valeur fournie par le client, y compris via l'API PostgREST.
+ */
+CREATE OR REPLACE FUNCTION assign_document_number()
+RETURNS TRIGGER
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  NEW.number := next_document_number(
+    NEW.organization_id,
+    TG_ARGV[0]::document_kind,
+    EXTRACT(YEAR FROM NEW.issued_on)::INT
+  );
   RETURN NEW;
 END;
 $$;
 
-DROP TRIGGER IF EXISTS rent_payments_normalize_month ON rent_payments;
-CREATE TRIGGER rent_payments_normalize_month
-  BEFORE INSERT OR UPDATE OF month ON rent_payments
-  FOR EACH ROW EXECUTE FUNCTION normalize_payment_month();
+DROP TRIGGER IF EXISTS receipts_number ON receipts;
+CREATE TRIGGER receipts_number BEFORE INSERT ON receipts
+  FOR EACH ROW EXECUTE FUNCTION assign_document_number('receipt');
 
--- Le statut du logement suit le cycle de vie du bail : c'est la règle
--- « clôturer un bail remet le logement en Libre », appliquée en base
--- pour qu'aucun chemin applicatif ne puisse l'oublier.
-CREATE OR REPLACE FUNCTION sync_apartment_status()
-RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DROP TRIGGER IF EXISTS cash_vouchers_number ON cash_vouchers;
+CREATE TRIGGER cash_vouchers_number BEFORE INSERT ON cash_vouchers
+  FOR EACH ROW EXECUTE FUNCTION assign_document_number('cash_voucher');
+
+DROP TRIGGER IF EXISTS delivery_notes_number ON delivery_notes;
+CREATE TRIGGER delivery_notes_number BEFORE INSERT ON delivery_notes
+  FOR EACH ROW EXECUTE FUNCTION assign_document_number('delivery_note');
+
+/**
+ * Le numéro est définitif.
+ *
+ * Une pièce remise à un tiers porte son numéro ; le modifier ensuite
+ * ferait diverger l'exemplaire papier et la base, et casserait la
+ * continuité de la numérotation que réclame tout contrôle comptable.
+ */
+CREATE OR REPLACE FUNCTION freeze_document_number()
+RETURNS TRIGGER
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 BEGIN
-  IF NEW.status = 'active' THEN
-    UPDATE apartments SET status = 'occupied' WHERE id = NEW.apartment_id;
-  ELSIF TG_OP = 'UPDATE' AND OLD.status = 'active' AND NEW.status <> 'active' THEN
-    UPDATE apartments SET status = 'vacant'
-    WHERE id = NEW.apartment_id
-      AND status = 'occupied'
-      AND NOT EXISTS (
-        SELECT 1 FROM leases
-        WHERE apartment_id = NEW.apartment_id
-          AND status = 'active'
-          AND id <> NEW.id
-      );
+  IF NEW.number IS DISTINCT FROM OLD.number THEN
+    RAISE EXCEPTION 'Le numéro d''une pièce émise ne se modifie pas.'
+      USING ERRCODE = '42501';
   END IF;
   RETURN NEW;
 END;
 $$;
 
-DROP TRIGGER IF EXISTS leases_sync_apartment_status ON leases;
-CREATE TRIGGER leases_sync_apartment_status
-  AFTER INSERT OR UPDATE OF status ON leases
-  FOR EACH ROW EXECUTE FUNCTION sync_apartment_status();
+DO $$
+DECLARE t TEXT;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['receipts', 'cash_vouchers', 'delivery_notes'] LOOP
+    EXECUTE format('DROP TRIGGER IF EXISTS %I_freeze_number ON %I', t, t);
+    EXECUTE format(
+      'CREATE TRIGGER %I_freeze_number BEFORE UPDATE ON %I
+       FOR EACH ROW EXECUTE FUNCTION freeze_document_number()', t, t);
+  END LOOP;
+END $$;
 
--- Journal d'audit générique : qui, quoi, quand, avant/après, d'où.
---
--- L'IP et le navigateur sont lus dans `request.headers`, que PostgREST
--- publie dans la transaction courante. Les capter ici plutôt que de les
--- faire transiter par l'application garantit qu'aucun chemin d'écriture ne
--- puisse les omettre — y compris un accès direct à l'API REST.
+-- =====================================================================
+-- AUDIT
+-- =====================================================================
 CREATE OR REPLACE FUNCTION audit_trigger()
 RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE
@@ -474,15 +431,8 @@ BEGIN
     v_id  := NEW.id;
   END IF;
 
-  -- Suppression de l'organisation elle-même : ses lignes métier partent en
-  -- cascade, chacune déclenchant ce trigger. Or `audit_logs.organization_id`
-  -- référence une organisation qui n'existe déjà plus dans la transaction —
-  -- l'insertion échouerait en 23503 et ferait échouer TOUTE la suppression.
-  -- Une organisation devenait ainsi indestructible, ce qui interdit la
-  -- clôture d'un compte comme l'effacement demandé par un client.
-  --
-  -- Journaliser n'aurait de toute façon aucun sens ici : le journal est
-  -- lui-même cloisonné par organisation, il disparaît avec elle.
+  -- L'organisation vient d'être supprimée en cascade : journaliser
+  -- échouerait sur la clé étrangère et annulerait la suppression.
   IF NOT EXISTS (SELECT 1 FROM organizations WHERE id = v_org) THEN
     RETURN CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
   END IF;
@@ -495,8 +445,7 @@ BEGIN
     FROM jsonb_each(v_after)
     WHERE v_before -> key IS DISTINCT FROM value;
 
-    -- Un UPDATE qui ne change rien (revalidation, réécriture identique)
-    -- ne mérite pas une ligne de journal.
+    -- Un UPDATE qui ne change rien ne mérite pas une ligne de journal.
     IF v_changed IS NULL THEN
       RETURN NEW;
     END IF;
@@ -533,8 +482,7 @@ DO $$
 DECLARE t TEXT;
 BEGIN
   FOREACH t IN ARRAY ARRAY[
-    'buildings', 'apartments', 'tenants', 'leases',
-    'rent_payments', 'expenses', 'maintenance', 'documents'
+    'receipts', 'cash_vouchers', 'delivery_notes', 'delivery_note_lines'
   ] LOOP
     EXECUTE format('DROP TRIGGER IF EXISTS %I_audit ON %I', t, t);
     EXECUTE format(
@@ -548,9 +496,13 @@ END $$;
 -- RPC
 -- =====================================================================
 
--- Crée l'organisation ET le profil owner en une transaction.
--- SECURITY DEFINER : c'est le seul chemin d'écriture dans `organizations`,
--- il n'existe donc aucune policy INSERT ouverte sur cette table.
+/**
+ * Crée l'organisation et le profil « owner » dans la même transaction.
+ *
+ * Il n'existe donc pas d'état intermédiaire où un compte authentifié
+ * serait rattaché à rien : l'onboarding ne peut pas s'interrompre à
+ * mi-chemin et laisser un utilisateur bloqué.
+ */
 CREATE OR REPLACE FUNCTION create_organization(
   org_name   TEXT,
   first_name TEXT DEFAULT '',
@@ -599,46 +551,12 @@ BEGIN
 END;
 $$;
 
--- Génère les échéances de loyer d'un bail, sans doublon.
-CREATE OR REPLACE FUNCTION generate_rent_schedule(
-  p_lease_id UUID,
-  p_months   INT DEFAULT 12
-)
-RETURNS INT
-LANGUAGE plpgsql SECURITY INVOKER SET search_path = public AS $$
-DECLARE
-  v_lease   leases%ROWTYPE;
-  v_month   DATE;
-  v_created INT := 0;
-  i         INT;
-BEGIN
-  -- RLS s'applique (SECURITY INVOKER) : un bail d'une autre organisation
-  -- est simplement introuvable.
-  SELECT * INTO v_lease FROM leases WHERE id = p_lease_id;
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'Bail introuvable.';
-  END IF;
-
-  FOR i IN 0 .. (p_months - 1) LOOP
-    v_month := (date_trunc('month', v_lease.start_date) + (i || ' month')::interval)::date;
-    EXIT WHEN v_lease.end_date IS NOT NULL AND v_month > v_lease.end_date;
-
-    INSERT INTO rent_payments (organization_id, lease_id, month, amount, status)
-    VALUES (v_lease.organization_id, v_lease.id, v_month,
-            v_lease.rent + v_lease.charges, 'pending')
-    ON CONFLICT (lease_id, month) DO NOTHING;
-
-    IF FOUND THEN v_created := v_created + 1; END IF;
-  END LOOP;
-
-  RETURN v_created;
-END;
-$$;
-
--- Recherche globale sur tout le parc, en une seule requête.
---
--- SECURITY INVOKER : le RLS de chaque table s'applique, la fonction ne peut
--- donc jamais révéler une ligne d'une autre organisation.
+/**
+ * Recherche globale sur les trois pièces.
+ *
+ * Le RLS s'applique — la fonction n'est pas SECURITY DEFINER : chacun ne
+ * trouve que les pièces de son organisation.
+ */
 CREATE OR REPLACE FUNCTION global_search(q TEXT, max_results INT DEFAULT 20)
 RETURNS TABLE (
   entity   TEXT,
@@ -647,64 +565,31 @@ RETURNS TABLE (
   subtitle TEXT,
   href     TEXT
 )
-LANGUAGE sql STABLE SECURITY INVOKER SET search_path = public AS $$
+LANGUAGE SQL STABLE SET search_path = public AS $$
   WITH needle AS (SELECT '%' || btrim(q) || '%' AS pattern)
   SELECT * FROM (
-    SELECT 'building'::text, b.id, b.name,
-           b.address || ', ' || b.city, '/buildings'::text
-    FROM buildings b, needle n
+    SELECT 'receipt', r.id, r.number, r.payer, '/receipts'
+    FROM receipts r, needle n
     WHERE btrim(q) <> ''
-      AND (b.name ILIKE n.pattern OR b.address ILIKE n.pattern OR b.city ILIKE n.pattern)
+      AND (r.number ILIKE n.pattern
+           OR r.payer ILIKE n.pattern
+           OR r.articles ILIKE n.pattern)
 
     UNION ALL
-    SELECT 'apartment', a.id, 'Logement ' || a.number,
-           COALESCE(bl.name, '') || COALESCE(' · ' || a.type, ''), '/apartments'
-    FROM apartments a
-    LEFT JOIN buildings bl ON bl.id = a.building_id, needle n
+    SELECT 'cash_voucher', c.id, c.number, c.counterparty, '/cash-vouchers'
+    FROM cash_vouchers c, needle n
     WHERE btrim(q) <> ''
-      AND (a.number ILIKE n.pattern OR a.type ILIKE n.pattern OR bl.name ILIKE n.pattern)
+      AND (c.number ILIKE n.pattern
+           OR c.counterparty ILIKE n.pattern
+           OR c.reason ILIKE n.pattern)
 
     UNION ALL
-    SELECT 'tenant', t.id, t.firstname || ' ' || t.lastname,
-           COALESCE(t.email, t.phone, ''), '/tenants'
-    FROM tenants t, needle n
+    SELECT 'delivery_note', d.id, d.number, d.issuer, '/delivery-notes'
+    FROM delivery_notes d, needle n
     WHERE btrim(q) <> ''
-      AND (t.firstname ILIKE n.pattern OR t.lastname ILIKE n.pattern
-           OR t.email ILIKE n.pattern OR t.phone ILIKE n.pattern
-           OR t.identity_number ILIKE n.pattern)
-
-    UNION ALL
-    SELECT 'lease', l.id,
-           'Bail ' || COALESCE(t.firstname || ' ' || t.lastname, ''),
-           COALESCE('Logement ' || a.number, '') , '/leases'
-    FROM leases l
-    LEFT JOIN tenants t ON t.id = l.tenant_id
-    LEFT JOIN apartments a ON a.id = l.apartment_id, needle n
-    WHERE btrim(q) <> ''
-      AND (t.firstname ILIKE n.pattern OR t.lastname ILIKE n.pattern
-           OR a.number ILIKE n.pattern)
-
-    UNION ALL
-    SELECT 'expense', e.id, e.label,
-           COALESCE(bl.name, ''), '/expenses'
-    FROM expenses e
-    LEFT JOIN buildings bl ON bl.id = e.building_id, needle n
-    WHERE btrim(q) <> '' AND (e.label ILIKE n.pattern OR bl.name ILIKE n.pattern)
-
-    UNION ALL
-    SELECT 'maintenance', m.id, m.title,
-           COALESCE(bl.name, ''), '/maintenance'
-    FROM maintenance m
-    LEFT JOIN buildings bl ON bl.id = m.building_id, needle n
-    WHERE btrim(q) <> ''
-      AND (m.title ILIKE n.pattern OR m.description ILIKE n.pattern
-           OR bl.name ILIKE n.pattern)
-
-    UNION ALL
-    SELECT 'document', d.id, d.file_name,
-           d.owner_type::text, '/documents'
-    FROM documents d, needle n
-    WHERE btrim(q) <> '' AND d.file_name ILIKE n.pattern
+      AND (d.number ILIKE n.pattern
+           OR d.issuer ILIKE n.pattern
+           OR d.service ILIKE n.pattern)
   ) AS results(entity, id, title, subtitle, href)
   LIMIT GREATEST(max_results, 1);
 $$;
@@ -733,18 +618,15 @@ GRANT EXECUTE ON FUNCTION record_login_event(TEXT, BOOLEAN, TEXT, TEXT) TO anon,
 -- =====================================================================
 -- ROW LEVEL SECURITY
 -- =====================================================================
-ALTER TABLE organizations  ENABLE ROW LEVEL SECURITY;
-ALTER TABLE profiles       ENABLE ROW LEVEL SECURITY;
-ALTER TABLE buildings      ENABLE ROW LEVEL SECURITY;
-ALTER TABLE apartments     ENABLE ROW LEVEL SECURITY;
-ALTER TABLE tenants        ENABLE ROW LEVEL SECURITY;
-ALTER TABLE leases         ENABLE ROW LEVEL SECURITY;
-ALTER TABLE rent_payments  ENABLE ROW LEVEL SECURITY;
-ALTER TABLE expenses       ENABLE ROW LEVEL SECURITY;
-ALTER TABLE maintenance    ENABLE ROW LEVEL SECURITY;
-ALTER TABLE documents      ENABLE ROW LEVEL SECURITY;
-ALTER TABLE audit_logs     ENABLE ROW LEVEL SECURITY;
-ALTER TABLE login_events   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE organizations       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE profiles            ENABLE ROW LEVEL SECURITY;
+ALTER TABLE receipts            ENABLE ROW LEVEL SECURITY;
+ALTER TABLE cash_vouchers       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE delivery_notes      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE delivery_note_lines ENABLE ROW LEVEL SECURITY;
+ALTER TABLE document_counters   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE audit_logs          ENABLE ROW LEVEL SECURITY;
+ALTER TABLE login_events        ENABLE ROW LEVEL SECURITY;
 
 -- ORGANIZATIONS -------------------------------------------------------
 DROP POLICY IF EXISTS organizations_select ON organizations;
@@ -755,23 +637,14 @@ DROP POLICY IF EXISTS organizations_update ON organizations;
 CREATE POLICY organizations_update ON organizations
   FOR UPDATE USING (
     id = (SELECT current_organization_id())
-    AND (SELECT is_staff())
     AND (SELECT has_role('owner'))
   );
 -- Pas de policy INSERT : passer par create_organization().
 
 -- PROFILES ------------------------------------------------------------
--- Un locataire ne voit que sa propre fiche : l'annuaire du personnel ne
--- le regarde pas.
 DROP POLICY IF EXISTS profiles_select ON profiles;
 CREATE POLICY profiles_select ON profiles
-  FOR SELECT USING (
-    id = (SELECT auth.uid())
-    OR (
-      organization_id = (SELECT current_organization_id())
-      AND (SELECT is_staff())
-    )
-  );
+  FOR SELECT USING (organization_id = (SELECT current_organization_id()));
 
 DROP POLICY IF EXISTS profiles_update ON profiles;
 CREATE POLICY profiles_update ON profiles
@@ -784,20 +657,19 @@ CREATE POLICY profiles_update ON profiles
 --
 -- La policy ci-dessus autorise chacun à modifier sa propre ligne — ce qu'on
 -- veut, pour qu'il corrige son nom. Mais « sa propre ligne » comprend
--- `role` et `tenant_id` : un locataire pouvait donc exécuter
+-- `role` : un lecteur pouvait donc exécuter
 --
---   UPDATE profiles SET role = 'owner', tenant_id = NULL WHERE id = auth.uid()
+--   UPDATE profiles SET role = 'owner' WHERE id = auth.uid()
 --
--- et devenir propriétaire de l'organisation qui l'héberge. Vérifié contre
--- la vraie base : les deux écritures passaient. Rien dans l'application ne
+-- et devenir propriétaire de l'organisation. Rien dans l'application ne
 -- proposait ce geste, mais l'API PostgREST est publique — le formulaire
 -- n'est pas la frontière.
 --
 -- D'où ce déclencheur : les colonnes sensibles sont figées, sauf pour un
 -- propriétaire modifiant le rôle de QUELQU'UN D'AUTRE. Sans session
 -- utilisateur (`auth.uid()` nul), on est sur le chemin serveur muni de la
--- clé service_role — ouverture d'un espace locataire, invitation — qui a
--- déjà franchi ses propres gardes applicatives.
+-- clé service_role — invitation d'un collaborateur — qui a déjà franchi
+-- ses propres gardes applicatives.
 CREATE OR REPLACE FUNCTION guard_profile_columns()
 RETURNS TRIGGER
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
@@ -812,12 +684,6 @@ BEGIN
      OR NEW.organization_id IS DISTINCT FROM OLD.organization_id THEN
     RAISE EXCEPTION
       'Un profil ne change ni d''identifiant ni d''organisation.'
-      USING ERRCODE = '42501';
-  END IF;
-
-  IF NEW.tenant_id IS DISTINCT FROM OLD.tenant_id THEN
-    RAISE EXCEPTION
-      'Le rattachement à une fiche locataire ne se modifie pas ainsi.'
       USING ERRCODE = '42501';
   END IF;
 
@@ -837,628 +703,111 @@ END;
 $$;
 
 DROP TRIGGER IF EXISTS profiles_guard_columns ON profiles;
-CREATE TRIGGER profiles_guard_columns
-  BEFORE UPDATE ON profiles
+CREATE TRIGGER profiles_guard_columns BEFORE UPDATE ON profiles
   FOR EACH ROW EXECUTE FUNCTION guard_profile_columns();
 
--- Retirer un COLLABORATEUR est un acte d'administration : réservé au
--- propriétaire. Fermer l'espace d'un LOCATAIRE relève de la gestion
--- courante du parc : le gestionnaire doit pouvoir le faire, sans pour
--- autant toucher aux comptes de l'équipe.
 DROP POLICY IF EXISTS profiles_delete ON profiles;
 CREATE POLICY profiles_delete ON profiles
   FOR DELETE USING (
     organization_id = (SELECT current_organization_id())
-    AND (SELECT is_staff())
+    AND (SELECT has_role('owner'))
     AND id <> (SELECT auth.uid())
-    AND (
-      (SELECT has_role('owner'))
-      OR (tenant_id IS NOT NULL AND (SELECT has_role('manager')))
-    )
   );
 
--- TABLES MÉTIER -------------------------------------------------------
--- Lecture : tout membre de l'organisation (viewer inclus).
--- Écriture : owner et manager.
+-- PIÈCES DE CAISSE ----------------------------------------------------
+--
+-- Le comptable écrit : c'est son métier. Le lecteur consulte.
+-- La suppression, elle, reste au propriétaire et au gestionnaire : une
+-- pièce détruite laisse un trou dans la numérotation, et ce geste doit
+-- rester rare et tracé.
 DO $$
 DECLARE t TEXT;
 BEGIN
   FOREACH t IN ARRAY ARRAY[
-    'buildings', 'apartments', 'tenants', 'leases', 'expenses',
-    'maintenance', 'documents'
+    'receipts', 'cash_vouchers', 'delivery_notes', 'delivery_note_lines'
   ] LOOP
     EXECUTE format('DROP POLICY IF EXISTS %I_select ON %I', t, t);
     EXECUTE format(
       'CREATE POLICY %I_select ON %I FOR SELECT
-       USING (organization_id = (SELECT current_organization_id())
-              AND (SELECT is_staff()))', t, t);
+       USING (organization_id = (SELECT current_organization_id()))', t, t);
 
-    EXECUTE format('DROP POLICY IF EXISTS %I_write ON %I', t, t);
+    EXECUTE format('DROP POLICY IF EXISTS %I_insert ON %I', t, t);
     EXECUTE format(
-      'CREATE POLICY %I_write ON %I FOR ALL
-       USING (organization_id = (SELECT current_organization_id())
-              AND (SELECT is_staff())
-              AND (SELECT has_role(''owner'', ''manager'')))
+      'CREATE POLICY %I_insert ON %I FOR INSERT
        WITH CHECK (organization_id = (SELECT current_organization_id())
-              AND (SELECT is_staff())
+              AND (SELECT has_role(''owner'', ''manager'', ''accountant'')))', t, t);
+
+    EXECUTE format('DROP POLICY IF EXISTS %I_update ON %I', t, t);
+    EXECUTE format(
+      'CREATE POLICY %I_update ON %I FOR UPDATE
+       USING (organization_id = (SELECT current_organization_id())
+              AND (SELECT has_role(''owner'', ''manager'', ''accountant'')))
+       WITH CHECK (organization_id = (SELECT current_organization_id())
+              AND (SELECT has_role(''owner'', ''manager'', ''accountant'')))', t, t);
+
+    EXECUTE format('DROP POLICY IF EXISTS %I_delete ON %I', t, t);
+    EXECUTE format(
+      'CREATE POLICY %I_delete ON %I FOR DELETE
+       USING (organization_id = (SELECT current_organization_id())
               AND (SELECT has_role(''owner'', ''manager'')))', t, t);
   END LOOP;
 END $$;
 
--- RENT PAYMENTS : le comptable écrit aussi.
-DROP POLICY IF EXISTS rent_payments_select ON rent_payments;
-CREATE POLICY rent_payments_select ON rent_payments
-  FOR SELECT USING (
-    organization_id = (SELECT current_organization_id())
-    AND (SELECT is_staff())
-  );
+-- COMPTEURS -----------------------------------------------------------
+-- Lecture seule, et seulement les siens : c'est ce qui alimente
+-- l'indicateur « prochain numéro ». L'écriture passe exclusivement par
+-- next_document_number(), qui est SECURITY DEFINER.
+DROP POLICY IF EXISTS document_counters_select ON document_counters;
+CREATE POLICY document_counters_select ON document_counters
+  FOR SELECT USING (organization_id = (SELECT current_organization_id()));
 
--- `is_staff()` autant que le rôle : le rôle seul laisserait un compte
--- locataire promu « comptable » écrire dans la caisse. Les deux périmètres
--- doivent rester disjoints quelle que soit la valeur de `role`.
-DROP POLICY IF EXISTS rent_payments_write ON rent_payments;
-CREATE POLICY rent_payments_write ON rent_payments
-  FOR ALL
-  USING (
-    organization_id = (SELECT current_organization_id())
-    AND (SELECT is_staff())
-    AND (SELECT has_role('owner', 'manager', 'accountant'))
-  )
-  WITH CHECK (
-    organization_id = (SELECT current_organization_id())
-    AND (SELECT is_staff())
-    AND (SELECT has_role('owner', 'manager', 'accountant'))
-  );
-
--- AUDIT LOGS : lecture seule, réservée au pilotage.
+-- JOURNAL -------------------------------------------------------------
 DROP POLICY IF EXISTS audit_logs_select ON audit_logs;
 CREATE POLICY audit_logs_select ON audit_logs
   FOR SELECT USING (
     organization_id = (SELECT current_organization_id())
-    AND (SELECT is_staff())
     AND (SELECT has_role('owner', 'manager'))
   );
--- Aucune policy d'écriture : seul le trigger SECURITY DEFINER insère.
+-- Pas d'INSERT, UPDATE ni DELETE : seul le trigger SECURITY DEFINER écrit.
 
--- LOGIN EVENTS : chacun voit son propre historique de connexion.
 DROP POLICY IF EXISTS login_events_select ON login_events;
 CREATE POLICY login_events_select ON login_events
   FOR SELECT USING (user_id = (SELECT auth.uid()));
 
 -- =====================================================================
--- PÉRIMÈTRE LOCATAIRE
+-- STORAGE — logos d'organisation
 --
--- Un locataire connecté ne voit QUE ce qui le concerne. Il ne peut pas
--- atteindre les autres locataires, les dépenses, le journal d'audit, ni
--- l'annuaire du personnel. Ces policies s'ajoutent aux précédentes : en
--- RLS, plusieurs policies permissives se combinent par OU, et celles du
--- personnel exigent `is_staff()`, donc les deux périmètres sont disjoints.
+-- Bucket public : le logo s'imprime dans l'en-tête de chaque pièce et
+-- s'affiche dans la barre latérale. Une URL signée expirerait au milieu
+-- d'un aperçu resté ouvert, et le logo disparaîtrait à l'impression.
 -- =====================================================================
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+  'logos', 'logos', true, 1048576,
+  ARRAY['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml']
+)
+ON CONFLICT (id) DO UPDATE SET
+  public = true,
+  file_size_limit = 1048576,
+  allowed_mime_types = ARRAY['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'];
 
-DROP POLICY IF EXISTS tenants_self_select ON tenants;
-CREATE POLICY tenants_self_select ON tenants
-  FOR SELECT USING (id = (SELECT current_tenant_id()));
+DROP POLICY IF EXISTS logos_read ON storage.objects;
+CREATE POLICY logos_read ON storage.objects
+  FOR SELECT USING (bucket_id = 'logos');
 
--- Son identité et ses coordonnées lui appartiennent : il peut les corriger.
---
--- `organization_id` est épinglé dans le WITH CHECK : sans cela, un locataire
--- déplaçait sa propre fiche vers une autre organisation, qui héritait d'un
--- dossier qu'elle n'a jamais créé.
-DROP POLICY IF EXISTS tenants_self_update ON tenants;
-CREATE POLICY tenants_self_update ON tenants
-  FOR UPDATE
-  USING (id = (SELECT current_tenant_id()))
-  WITH CHECK (
-    id = (SELECT current_tenant_id())
-    AND organization_id = (SELECT current_organization_id())
-  );
-
-DROP POLICY IF EXISTS leases_tenant_select ON leases;
-CREATE POLICY leases_tenant_select ON leases
-  FOR SELECT USING (tenant_id = (SELECT current_tenant_id()));
-
-DROP POLICY IF EXISTS rent_payments_tenant_select ON rent_payments;
-CREATE POLICY rent_payments_tenant_select ON rent_payments
-  FOR SELECT USING (lease_id = ANY (tenant_lease_ids()));
-
-DROP POLICY IF EXISTS apartments_tenant_select ON apartments;
-CREATE POLICY apartments_tenant_select ON apartments
-  FOR SELECT USING (id = ANY (tenant_apartment_ids()));
-
-DROP POLICY IF EXISTS buildings_tenant_select ON buildings;
-CREATE POLICY buildings_tenant_select ON buildings
-  FOR SELECT USING (id = ANY (tenant_building_ids()));
-
--- Documents : uniquement ceux rattachés à sa fiche ou à ses baux. Les
--- pièces de l'organisation ou d'un immeuble ne lui sont pas destinées.
-DROP POLICY IF EXISTS documents_tenant_select ON documents;
-CREATE POLICY documents_tenant_select ON documents
-  FOR SELECT USING (
-    (owner_type = 'tenant' AND owner_id = (SELECT current_tenant_id()))
-    OR (owner_type = 'lease' AND owner_id = ANY (tenant_lease_ids()))
-  );
-
--- Interventions : il suit celles de son logement et peut en déclarer.
-DROP POLICY IF EXISTS maintenance_tenant_select ON maintenance;
-CREATE POLICY maintenance_tenant_select ON maintenance
-  FOR SELECT USING (apartment_id = ANY (tenant_apartment_ids()));
-
-DROP POLICY IF EXISTS maintenance_tenant_insert ON maintenance;
-CREATE POLICY maintenance_tenant_insert ON maintenance
-  FOR INSERT
-  WITH CHECK (
-    (SELECT current_tenant_id()) IS NOT NULL
-    AND apartment_id = ANY (tenant_apartment_ids())
-    AND building_id = ANY (tenant_building_ids())
-    AND organization_id = (SELECT current_organization_id())
-    -- Une déclaration entre toujours en file d'attente : le locataire ne
-    -- décide ni de la priorité affichée ni de la clôture.
-    AND status = 'open'
-  );
-
--- Pas de policy UPDATE/DELETE pour le locataire sur `maintenance` :
--- une fois déclaré, l'incident appartient au suivi du gestionnaire.
-
--- =====================================================================
--- STORAGE — bucket privé, cloisonné par organisation
--- Convention de chemin : <organization_id>/<owner_type>/<owner_id>/<fichier>
--- Les téléchargements passent par des URLs signées temporaires.
---
--- Les fonctions sont qualifiées `public.` ici, contrairement au reste du
--- fichier : ces policies s'évaluent dans les sessions de l'API Storage,
--- dont le `search_path` ne contient pas nécessairement `public`. Sans
--- qualification, la policy se crée mais échoue à l'exécution — et un
--- locataire ne peut plus télécharger sa quittance.
--- =====================================================================
-INSERT INTO storage.buckets (id, name, public)
-VALUES ('documents', 'documents', false)
-ON CONFLICT (id) DO UPDATE SET public = false;
-
--- Le personnel lit tout le dossier de son organisation.
-DROP POLICY IF EXISTS documents_storage_select ON storage.objects;
-CREATE POLICY documents_storage_select ON storage.objects
-  FOR SELECT USING (
-    bucket_id = 'documents'
-    AND (storage.foldername(name))[1] = (SELECT public.current_organization_id())::text
-    AND (SELECT public.is_staff())
-  );
-
--- Le locataire ne lit que les objets rangés sous sa propre fiche ou sous
--- l'un de ses baux — la convention de chemin
--- <organization_id>/<owner_type>/<owner_id>/<fichier> rend ce contrôle
--- possible sans jointure.
-DROP POLICY IF EXISTS documents_storage_tenant_select ON storage.objects;
-CREATE POLICY documents_storage_tenant_select ON storage.objects
-  FOR SELECT USING (
-    bucket_id = 'documents'
-    AND (storage.foldername(name))[1] = (SELECT public.current_organization_id())::text
-    AND (
-      (
-        (storage.foldername(name))[2] = 'tenant'
-        AND (storage.foldername(name))[3] = (SELECT public.current_tenant_id())::text
-      )
-      OR (
-        (storage.foldername(name))[2] = 'lease'
-        AND (storage.foldername(name))[3] = ANY (
-          SELECT unnest(public.tenant_lease_ids())::text
-        )
-      )
-    )
-  );
-
-DROP POLICY IF EXISTS documents_storage_write ON storage.objects;
-CREATE POLICY documents_storage_write ON storage.objects
+DROP POLICY IF EXISTS logos_write ON storage.objects;
+CREATE POLICY logos_write ON storage.objects
   FOR ALL
   USING (
-    bucket_id = 'documents'
+    bucket_id = 'logos'
     AND (storage.foldername(name))[1] = (SELECT public.current_organization_id())::text
-    AND (SELECT public.has_role('owner', 'manager'))
+    AND (SELECT public.has_role('owner'))
   )
   WITH CHECK (
-    bucket_id = 'documents'
+    bucket_id = 'logos'
     AND (storage.foldername(name))[1] = (SELECT public.current_organization_id())::text
-    AND (SELECT public.has_role('owner', 'manager'))
+    AND (SELECT public.has_role('owner'))
   );
-
--- =====================================================================
--- NOTIFICATIONS
---
--- Une notification vise TOUJOURS un profil précis, jamais « le personnel »
--- en bloc : sans destinataire nommé, `read_at` n'aurait pas de sens et
--- « lu par l'un » deviendrait « lu par tous ». Prévenir l'équipe consiste
--- donc à écrire une ligne par membre concerné — leur nombre est petit.
---
--- Aucune policy d'écriture : les notifications naissent de triggers
--- SECURITY DEFINER. Personne ne peut s'en fabriquer ni en effacer chez un
--- autre, et aucun chemin applicatif ne peut oublier d'en émettre.
--- =====================================================================
-DO $$ BEGIN
-  CREATE TYPE notification_kind AS ENUM (
-    'incident_declared', 'incident_updated',
-    'payment_recorded', 'payment_declared', 'payment_declaration_reviewed',
-    'lease_created'
-  );
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-
-CREATE TABLE IF NOT EXISTS notifications (
-  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-  recipient_id    UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-  kind            notification_kind NOT NULL,
-  title           TEXT NOT NULL,
-  body            TEXT,
-  -- Chemin applicatif à ouvrir au clic : la notification mène à l'écran
-  -- qui permet d'agir, sinon elle n'est qu'un bruit de plus.
-  href            TEXT,
-  read_at         TIMESTAMPTZ,
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS notifications_recipient_idx
-  ON notifications (recipient_id, created_at DESC);
--- Sert le compteur du badge, interrogé à chaque rendu de la navigation.
-CREATE INDEX IF NOT EXISTS notifications_unread_idx
-  ON notifications (recipient_id) WHERE read_at IS NULL;
-
-ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS notifications_select ON notifications;
-CREATE POLICY notifications_select ON notifications
-  FOR SELECT USING (recipient_id = (SELECT auth.uid()));
-
--- Marquer comme lu est le seul écrit permis au destinataire. `WITH CHECK`
--- l'empêche de réattribuer la ligne à quelqu'un d'autre au passage.
-DROP POLICY IF EXISTS notifications_update ON notifications;
-CREATE POLICY notifications_update ON notifications
-  FOR UPDATE
-  USING (recipient_id = (SELECT auth.uid()))
-  WITH CHECK (recipient_id = (SELECT auth.uid()));
-
--- ------------------------------------------------------- ÉMISSION
-CREATE OR REPLACE FUNCTION notify_staff(
-  p_org   UUID,
-  p_kind  notification_kind,
-  p_title TEXT,
-  p_body  TEXT,
-  p_href  TEXT
-)
-RETURNS VOID
-LANGUAGE sql SECURITY DEFINER SET search_path = public AS $$
-  INSERT INTO notifications (organization_id, recipient_id, kind, title, body, href)
-  SELECT p_org, p.id, p_kind, p_title, p_body, p_href
-  FROM profiles p
-  WHERE p.organization_id = p_org
-    AND p.tenant_id IS NULL
-    AND p.role IN ('owner', 'manager');
-$$;
-
--- Sans compte portail, le locataire n'a pas de profil : la requête ne
--- renvoie rien et l'émission est un non-événement. C'est voulu.
-CREATE OR REPLACE FUNCTION notify_tenant(
-  p_org    UUID,
-  p_tenant UUID,
-  p_kind   notification_kind,
-  p_title  TEXT,
-  p_body   TEXT,
-  p_href   TEXT
-)
-RETURNS VOID
-LANGUAGE sql SECURITY DEFINER SET search_path = public AS $$
-  INSERT INTO notifications (organization_id, recipient_id, kind, title, body, href)
-  SELECT p_org, p.id, p_kind, p_title, p_body, p_href
-  FROM profiles p
-  WHERE p.tenant_id = p_tenant
-    AND p.organization_id = p_org;
-$$;
-
--- Locataire titulaire du bail actif d'un logement, s'il en existe un.
-CREATE OR REPLACE FUNCTION apartment_active_tenant(p_apartment UUID)
-RETURNS UUID
-LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
-  SELECT l.tenant_id FROM leases l
-  WHERE l.apartment_id = p_apartment AND l.status = 'active'
-  LIMIT 1;
-$$;
-
--- ------------------------------------------------------- DÉCLENCHEURS
-CREATE OR REPLACE FUNCTION notify_maintenance_created()
-RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-DECLARE v_tenant UUID;
-BEGIN
-  -- Déclaré depuis le portail : c'est l'équipe qu'il faut alerter.
-  IF current_tenant_id() IS NOT NULL THEN
-    PERFORM notify_staff(
-      NEW.organization_id, 'incident_declared',
-      'Incident déclaré par un locataire', NEW.title, '/maintenance'
-    );
-  ELSIF NEW.apartment_id IS NOT NULL THEN
-    v_tenant := apartment_active_tenant(NEW.apartment_id);
-    IF v_tenant IS NOT NULL THEN
-      PERFORM notify_tenant(
-        NEW.organization_id, v_tenant, 'incident_updated',
-        'Une intervention est prévue dans votre logement',
-        NEW.title, '/portal/incidents'
-      );
-    END IF;
-  END IF;
-  RETURN NEW;
-END;
-$$;
-
-DROP TRIGGER IF EXISTS maintenance_notify_created ON maintenance;
-CREATE TRIGGER maintenance_notify_created
-  AFTER INSERT ON maintenance
-  FOR EACH ROW EXECUTE FUNCTION notify_maintenance_created();
-
-CREATE OR REPLACE FUNCTION notify_maintenance_status()
-RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-DECLARE v_tenant UUID;
-BEGIN
-  IF NEW.status IS NOT DISTINCT FROM OLD.status OR NEW.apartment_id IS NULL THEN
-    RETURN NEW;
-  END IF;
-
-  v_tenant := apartment_active_tenant(NEW.apartment_id);
-  IF v_tenant IS NULL THEN RETURN NEW; END IF;
-
-  PERFORM notify_tenant(
-    NEW.organization_id, v_tenant, 'incident_updated',
-    CASE NEW.status
-      WHEN 'in_progress' THEN 'Intervention en cours'
-      WHEN 'resolved'    THEN 'Intervention résolue'
-      WHEN 'cancelled'   THEN 'Intervention annulée'
-      ELSE 'Intervention mise à jour'
-    END,
-    NEW.title, '/portal/incidents'
-  );
-  RETURN NEW;
-END;
-$$;
-
-DROP TRIGGER IF EXISTS maintenance_notify_status ON maintenance;
-CREATE TRIGGER maintenance_notify_status
-  AFTER UPDATE OF status ON maintenance
-  FOR EACH ROW EXECUTE FUNCTION notify_maintenance_status();
-
-CREATE OR REPLACE FUNCTION notify_payment_paid()
-RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-DECLARE v_tenant UUID;
-BEGIN
-  IF NEW.status <> 'paid' OR OLD.status IS NOT DISTINCT FROM 'paid' THEN
-    RETURN NEW;
-  END IF;
-
-  SELECT l.tenant_id INTO v_tenant FROM leases l WHERE l.id = NEW.lease_id;
-  IF v_tenant IS NULL THEN RETURN NEW; END IF;
-
-  PERFORM notify_tenant(
-    NEW.organization_id, v_tenant, 'payment_recorded',
-    'Loyer encaissé',
-    'Votre quittance de ' || to_char(NEW.month, 'MM/YYYY') || ' est disponible.',
-    '/portal/payments'
-  );
-  RETURN NEW;
-END;
-$$;
-
-DROP TRIGGER IF EXISTS rent_payments_notify_paid ON rent_payments;
-CREATE TRIGGER rent_payments_notify_paid
-  AFTER UPDATE OF status ON rent_payments
-  FOR EACH ROW EXECUTE FUNCTION notify_payment_paid();
-
-CREATE OR REPLACE FUNCTION notify_lease_created()
-RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-BEGIN
-  IF NEW.status <> 'active' THEN RETURN NEW; END IF;
-
-  PERFORM notify_tenant(
-    NEW.organization_id, NEW.tenant_id, 'lease_created',
-    'Votre bail est disponible',
-    'Retrouvez le détail de votre bail dans votre espace.', '/portal/lease'
-  );
-  RETURN NEW;
-END;
-$$;
-
-DROP TRIGGER IF EXISTS leases_notify_created ON leases;
-CREATE TRIGGER leases_notify_created
-  AFTER INSERT ON leases
-  FOR EACH ROW EXECUTE FUNCTION notify_lease_created();
-
--- =====================================================================
--- DÉCLARATIONS DE PAIEMENT
---
--- Tant qu'aucun prestataire de paiement n'est raccordé, le locataire
--- signale un règlement effectué hors ligne (virement, espèces, mobile
--- money). Une déclaration n'est PAS un encaissement : elle ne touche pas
--- `rent_payments` tant qu'un gestionnaire ne l'a pas validée. La comptable
--- garde donc la main sur ce qui entre en caisse.
--- =====================================================================
-DO $$ BEGIN
-  CREATE TYPE payment_declaration_status AS ENUM ('pending', 'accepted', 'rejected');
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-
-CREATE TABLE IF NOT EXISTS payment_declarations (
-  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-  rent_payment_id UUID NOT NULL,
-  tenant_id       UUID NOT NULL,
-  amount          NUMERIC(12, 2) NOT NULL CHECK (amount > 0),
-  paid_on         DATE NOT NULL,
-  method          TEXT NOT NULL,
-  reference       TEXT,
-  status          payment_declaration_status NOT NULL DEFAULT 'pending',
-  reviewed_by     UUID REFERENCES profiles(id) ON DELETE SET NULL,
-  reviewed_at     TIMESTAMPTZ,
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE (id, organization_id),
-  FOREIGN KEY (rent_payment_id, organization_id)
-    REFERENCES rent_payments (id, organization_id) ON DELETE CASCADE,
-  FOREIGN KEY (tenant_id, organization_id)
-    REFERENCES tenants (id, organization_id) ON DELETE CASCADE
-);
-
-CREATE INDEX IF NOT EXISTS payment_declarations_organization_idx
-  ON payment_declarations (organization_id, created_at DESC);
-
--- Une seule déclaration en attente par échéance : sans cela, un double
--- envoi créerait deux demandes et un encaissement compté deux fois.
-CREATE UNIQUE INDEX IF NOT EXISTS payment_declarations_one_pending
-  ON payment_declarations (rent_payment_id) WHERE status = 'pending';
-
-ALTER TABLE payment_declarations ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS payment_declarations_staff_select ON payment_declarations;
-CREATE POLICY payment_declarations_staff_select ON payment_declarations
-  FOR SELECT USING (
-    organization_id = (SELECT current_organization_id())
-    AND (SELECT is_staff())
-  );
-
-DROP POLICY IF EXISTS payment_declarations_staff_write ON payment_declarations;
-CREATE POLICY payment_declarations_staff_write ON payment_declarations
-  FOR ALL
-  USING (
-    organization_id = (SELECT current_organization_id())
-    AND (SELECT is_staff())
-    AND (SELECT has_role('owner', 'manager', 'accountant'))
-  )
-  WITH CHECK (
-    organization_id = (SELECT current_organization_id())
-    AND (SELECT is_staff())
-    AND (SELECT has_role('owner', 'manager', 'accountant'))
-  );
-
-DROP POLICY IF EXISTS payment_declarations_tenant_select ON payment_declarations;
-CREATE POLICY payment_declarations_tenant_select ON payment_declarations
-  FOR SELECT USING (tenant_id = (SELECT current_tenant_id()));
-
--- Le locataire déclare pour lui-même, sur ses propres échéances, et ne
--- choisit pas le statut : `status = 'pending'` est verrouillé ici, pas
--- seulement dans le formulaire.
-DROP POLICY IF EXISTS payment_declarations_tenant_insert ON payment_declarations;
-CREATE POLICY payment_declarations_tenant_insert ON payment_declarations
-  FOR INSERT
-  WITH CHECK (
-    tenant_id = (SELECT current_tenant_id())
-    AND organization_id = (SELECT current_organization_id())
-    AND rent_payment_id IN (
-      SELECT rp.id FROM rent_payments rp
-      WHERE rp.lease_id = ANY (tenant_lease_ids())
-    )
-    AND status = 'pending'
-    AND reviewed_by IS NULL
-  );
-
--- Pas d'UPDATE/DELETE côté locataire : une déclaration engagée se corrige
--- en en parlant à son gestionnaire, pas en la réécrivant.
-
--- Journalise les déclarations comme le reste du métier.
-DROP TRIGGER IF EXISTS payment_declarations_audit ON payment_declarations;
-CREATE TRIGGER payment_declarations_audit
-  AFTER INSERT OR UPDATE OR DELETE ON payment_declarations
-  FOR EACH ROW EXECUTE FUNCTION audit_trigger();
-
-CREATE OR REPLACE FUNCTION notify_payment_declared()
-RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-DECLARE v_name TEXT;
-BEGIN
-  SELECT t.firstname || ' ' || t.lastname INTO v_name
-  FROM tenants t WHERE t.id = NEW.tenant_id;
-
-  PERFORM notify_staff(
-    NEW.organization_id, 'payment_declared',
-    'Paiement déclaré par un locataire',
-    COALESCE(v_name, 'Un locataire') || ' déclare avoir réglé '
-      || to_char(NEW.amount, 'FM999G999G999') || ' F CFA.',
-    '/payments'
-  );
-  RETURN NEW;
-END;
-$$;
-
-DROP TRIGGER IF EXISTS payment_declarations_notify ON payment_declarations;
-CREATE TRIGGER payment_declarations_notify
-  AFTER INSERT ON payment_declarations
-  FOR EACH ROW EXECUTE FUNCTION notify_payment_declared();
-
-/**
- * Statuer sur une déclaration, et n'encaisser qu'en cas d'acceptation.
- *
- * SECURITY INVOKER : le RLS reste seul juge du droit d'écrire — la
- * fonction ne crée aucun privilège, elle rend l'opération atomique. Sans
- * elle, un plantage entre « déclaration acceptée » et « échéance mise à
- * jour » laisserait un encaissement fantôme.
- */
-CREATE OR REPLACE FUNCTION review_payment_declaration(
-  p_id     UUID,
-  p_accept BOOLEAN
-)
-RETURNS VOID
-LANGUAGE plpgsql SECURITY INVOKER SET search_path = public AS $$
-DECLARE
-  v_decl   payment_declarations%ROWTYPE;
-  v_pay    rent_payments%ROWTYPE;
-  v_paid   NUMERIC(12, 2);
-  v_status payment_status;
-BEGIN
-  SELECT * INTO v_decl FROM payment_declarations WHERE id = p_id;
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'Déclaration introuvable.';
-  END IF;
-  IF v_decl.status <> 'pending' THEN
-    RAISE EXCEPTION 'Cette déclaration a déjà été traitée.';
-  END IF;
-
-  UPDATE payment_declarations
-  SET status      = CASE
-        WHEN p_accept THEN 'accepted'::payment_declaration_status
-        ELSE 'rejected'::payment_declaration_status
-      END,
-      reviewed_by = auth.uid(),
-      reviewed_at = NOW()
-  WHERE id = p_id;
-
-  IF p_accept THEN
-    SELECT * INTO v_pay FROM rent_payments WHERE id = v_decl.rent_payment_id;
-    IF NOT FOUND THEN
-      RAISE EXCEPTION 'Échéance introuvable.';
-    END IF;
-
-    v_paid := v_pay.amount_paid + v_decl.amount;
-    v_status := CASE
-      WHEN v_paid >= v_pay.amount THEN 'paid'::payment_status
-      ELSE 'partial'::payment_status
-    END;
-
-    UPDATE rent_payments
-    SET amount_paid  = v_paid,
-        status       = v_status,
-        payment_date = v_decl.paid_on,
-        method       = COALESCE(v_pay.method, v_decl.method)
-    WHERE id = v_pay.id;
-  END IF;
-
-  -- Une acceptation qui solde l'échéance déclenche déjà « Loyer encaissé »
-  -- par le trigger de `rent_payments` : le dire deux fois n'informerait
-  -- personne mieux. On ne notifie donc que les cas qu'il ne couvre pas.
-  IF NOT p_accept THEN
-    PERFORM notify_tenant(
-      v_decl.organization_id, v_decl.tenant_id, 'payment_declaration_reviewed',
-      'Paiement non confirmé',
-      'Votre gestionnaire n''a pas retrouvé ce règlement. Contactez-le.',
-      '/portal/payments'
-    );
-  ELSIF v_status <> 'paid' THEN
-    PERFORM notify_tenant(
-      v_decl.organization_id, v_decl.tenant_id, 'payment_declaration_reviewed',
-      'Paiement partiel enregistré',
-      'Votre règlement a été enregistré. Il reste un solde à régler.',
-      '/portal/payments'
-    );
-  END IF;
-END;
-$$;
 
 -- =====================================================================
 -- LIMITATION DE DÉBIT PARTAGÉE
@@ -1527,43 +876,3 @@ END;
 $$;
 
 GRANT EXECUTE ON FUNCTION consume_rate_limit(TEXT, INT, INT) TO anon, authenticated;
-
--- =====================================================================
--- LOGOS D'ORGANISATION
---
--- Bucket public, à la différence de `documents`. Un logo s'affiche sur
--- chaque écran et dans les quittances : le servir par URL signée
--- obligerait à en régénérer une à chaque rendu, pour protéger une image
--- que l'organisation expose de toute façon à ses locataires.
---
--- Public en LECTURE seulement. L'écriture reste réservée au propriétaire
--- de l'organisation, et la convention de chemin `<organization_id>/…`
--- l'empêche de déposer quoi que ce soit sous une autre.
--- =====================================================================
-INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-VALUES (
-  'logos', 'logos', true, 1048576,
-  ARRAY['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml']
-)
-ON CONFLICT (id) DO UPDATE SET
-  public = true,
-  file_size_limit = 1048576,
-  allowed_mime_types = ARRAY['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'];
-
-DROP POLICY IF EXISTS logos_read ON storage.objects;
-CREATE POLICY logos_read ON storage.objects
-  FOR SELECT USING (bucket_id = 'logos');
-
-DROP POLICY IF EXISTS logos_write ON storage.objects;
-CREATE POLICY logos_write ON storage.objects
-  FOR ALL
-  USING (
-    bucket_id = 'logos'
-    AND (storage.foldername(name))[1] = (SELECT public.current_organization_id())::text
-    AND (SELECT public.has_role('owner'))
-  )
-  WITH CHECK (
-    bucket_id = 'logos'
-    AND (storage.foldername(name))[1] = (SELECT public.current_organization_id())::text
-    AND (SELECT public.has_role('owner'))
-  );
