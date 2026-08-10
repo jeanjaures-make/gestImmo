@@ -157,6 +157,77 @@ export type DeliveryNoteLine = {
   created_at: string;
 };
 
+// -------------------------------------------------------- plans & billing
+export type BillingInterval = "month";
+export type SubscriptionStatus = "pending" | "active" | "expired" | "cancelled";
+export type PaymentStatus = "pending" | "paid" | "failed" | "cancelled" | "expired";
+
+export type Plan = {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  price: number;
+  currency: string;
+  billing_interval: BillingInterval;
+  duration_days: number;
+  document_limit: number | null;
+  user_limit: number | null;
+  is_unlimited_documents: boolean;
+  is_unlimited_users: boolean;
+  is_launch_offer: boolean;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type Subscription = {
+  id: string;
+  organization_id: string;
+  plan_id: string;
+  status: SubscriptionStatus;
+  started_at: string | null;
+  expires_at: string | null;
+  cancelled_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type Payment = {
+  id: string;
+  organization_id: string;
+  user_id: string | null;
+  subscription_id: string | null;
+  plan_id: string;
+  transaction_id: string;
+  amount: number;
+  currency: string;
+  provider: string;
+  payment_method: string | null;
+  status: PaymentStatus;
+  paid_at: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
+/** Résumé d'abonnement retourné par `getActiveSubscription()`. */
+export type ActiveSubscription = {
+  subscription_id: string;
+  plan_id: string;
+  plan_slug: string;
+  plan_name: string;
+  price: number;
+  currency: string;
+  document_limit: number | null;
+  user_limit: number | null;
+  is_unlimited_documents: boolean;
+  is_unlimited_users: boolean;
+  is_launch_offer: boolean;
+  status: SubscriptionStatus;
+  expires_at: string | null;
+};
+
 // ----------------------------------------------------------- formatters
 // La devise est déclarée dans `lib/money.ts`. Réexportée ici pour que les
 // écrans gardent un point d'entrée unique.

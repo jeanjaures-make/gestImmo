@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { authorize } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import type { FormState } from "@/lib/form";
+import { checkDocumentQuota } from "@/lib/subscriptions";
 import { firstIssue, formDataToObject, receiptSchema } from "@/lib/validation";
 
 /**
@@ -21,6 +22,17 @@ export async function createReceipt(
 ): Promise<FormState> {
   const auth = await authorize("owner", "manager", "accountant");
   if (!auth.ok) return { error: auth.error };
+
+  // Quota de pièces : vérifié côté serveur, jamais côté frontend.
+  const quota = await checkDocumentQuota(auth.session.organization.id);
+  if (!quota.allowed) {
+    return {
+      error:
+        quota.limit === 0
+          ? "Aucun abonnement actif. Souscrivez un plan pour émettre des pièces."
+          : `Limite atteinte : ${quota.used}/${quota.limit} pièces sur votre plan ${quota.planName}. Changez de plan pour continuer.`,
+    };
+  }
 
   const parsed = receiptSchema.safeParse(formDataToObject(formData));
   if (!parsed.success) return { error: firstIssue(parsed.error) };

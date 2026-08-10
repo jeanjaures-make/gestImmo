@@ -23,10 +23,19 @@ export default defineConfig({
   test: {
     include: ["tests/**/*.test.ts"],
     environment: "node",
+    server: {
+      deps: {
+        // `server-only` est un marqueur Next.js qui empêche l'import depuis
+        // un Client Component. En test, on l'ignore : on teste la logique
+        // pure, pas la frontière client/serveur.
+        inline: ["server-only"],
+      },
+    },
   },
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./", import.meta.url)),
+      "server-only": fileURLToPath(new URL("./tests/__mocks__/server-only.ts", import.meta.url)),
     },
   },
 });

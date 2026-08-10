@@ -19,6 +19,9 @@ const PUBLIC_PATHS = [
   "/auth",
   "/setup",
   "/legal",
+  // Le webhook CinetPay n'a pas de session Supabase : il est public.
+  // La sécurité repose sur la vérification serveur auprès de CinetPay.
+  "/api/webhooks",
 ];
 
 /** Routes d'entrée dont un utilisateur déjà connecté n'a plus besoin. */
@@ -40,7 +43,7 @@ const GUEST_ONLY_PATHS = ["/login", "/signup", "/forgot-password"];
 const ANONYMOUS_PATHS = ["/", "/setup"];
 
 /** Même logique, pour un préfixe entier : les pages légales. */
-const ANONYMOUS_PREFIXES = ["/legal/"];
+const ANONYMOUS_PREFIXES = ["/legal/", "/payment/"];
 
 /**
  * Rafraîchit le jeton de session à chaque requête et protège le dashboard.

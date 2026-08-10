@@ -9,6 +9,7 @@ import { callerKey, rateLimit } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { FormState } from "@/lib/form";
+import { checkUserLimit } from "@/lib/subscriptions";
 import { firstIssue, formDataToObject } from "@/lib/validation";
 
 const ROLES = ["owner", "manager", "accountant", "viewer"] as const;
@@ -38,6 +39,17 @@ export async function inviteMember(
 
   const parsed = inviteSchema.safeParse(formDataToObject(formData));
   if (!parsed.success) return { error: firstIssue(parsed.error) };
+
+  // Limite d'utilisateurs du plan : vérifiée côté serveur.
+  const userLimit = await checkUserLimit(auth.session.organization.id);
+  if (!userLimit.allowed) {
+    return {
+      error:
+        userLimit.limit === 0
+          ? "Aucun abonnement actif. Souscrivez un plan pour inviter des membres."
+          : `Limite atteinte : ${userLimit.current}/${userLimit.limit} utilisateurs sur votre plan ${userLimit.planName}. Passez à un plan supérieur pour inviter davantage de membres.`,
+    };
+  }
 
   const admin = createAdminClient();
   if (!admin) {
