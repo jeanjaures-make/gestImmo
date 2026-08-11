@@ -6,9 +6,11 @@ import { ExportButton } from "@/components/export-button";
 import { Pagination } from "@/components/pagination";
 import { RecordList, type RecordField } from "@/components/record-list";
 import { RowActions } from "@/components/row-actions";
+import { SubscriptionBanner } from "@/components/subscription-banner";
 import { PageHeader } from "@/components/ui/kit";
-import { canDelete, canIssue, requireSession } from "@/lib/auth";
+import { canAdminister, canDelete, canIssue, requireSession } from "@/lib/auth";
 import { readPage } from "@/lib/pagination";
+import { getSubscriptionState } from "@/lib/subscriptions";
 import { createClient } from "@/lib/supabase/server";
 import {
   formatDate,
@@ -30,9 +32,10 @@ export default async function DeliveryNotesPage({
 }: {
   searchParams: Promise<{ page?: string }>;
 }) {
-  const { profile } = await requireSession();
+  const { profile, organization } = await requireSession();
   const { page: pageParam } = await searchParams;
   const page = readPage(pageParam);
+  const subscription = await getSubscriptionState(organization.id);
 
   const supabase = await createClient();
   // Les lignes sont chargées avec le bon : sans elles, ouvrir « Modifier »
@@ -93,6 +96,11 @@ export default async function DeliveryNotesPage({
         title="Bons de sortie"
         description="Ce qui quitte le magasin : les articles, leur quantité et leur destination."
         action={<ExportButton dataset="bons-de-sortie" />}
+      />
+
+      <SubscriptionBanner
+        state={subscription}
+        canSubscribe={canAdminister(profile.role)}
       />
 
       {editable && (

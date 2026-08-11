@@ -24,6 +24,8 @@ type NavItem = {
   icon: typeof LayoutDashboard;
   /** Rôles autorisés ; absent = tous les membres. */
   roles?: UserRole[];
+  /** Visible uniquement si l'abonnement actif ouvre cette capacité. */
+  requiresAuditLog?: boolean;
 };
 
 const NAV: NavItem[] = [
@@ -36,6 +38,9 @@ const NAV: NavItem[] = [
     label: "Journal d'audit",
     icon: ScrollText,
     roles: ["owner", "manager"],
+    // Le journal complet n'est inclus qu'à partir de Business.
+    // Starter ne dispose que des documents de base.
+    requiresAuditLog: true,
   },
   { href: "/team", label: "Équipe", icon: UserCog, roles: ["owner"] },
   // Le propriétaire seul : c'est lui qui engage la dépense, et lui seul
@@ -48,13 +53,19 @@ export function Sidebar({
   organizationName,
   logoUrl,
   role,
+  hasAuditLog,
 }: {
   organizationName: string;
   logoUrl: string | null;
   role: UserRole;
+  hasAuditLog: boolean;
 }) {
   const pathname = usePathname();
-  const items = NAV.filter((item) => !item.roles || item.roles.includes(role));
+  const items = NAV.filter(
+    (item) =>
+      (!item.roles || item.roles.includes(role)) &&
+      (!item.requiresAuditLog || hasAuditLog),
+  );
 
   return (
     // Masquée sur mobile : la navigation y passe par la barre basse.

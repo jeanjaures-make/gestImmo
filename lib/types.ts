@@ -176,6 +176,8 @@ export type Plan = {
   is_unlimited_documents: boolean;
   is_unlimited_users: boolean;
   is_launch_offer: boolean;
+  /** Le journal d'audit est-il consultable ? L'écriture, elle, est toujours faite. */
+  has_audit_log: boolean;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -224,6 +226,7 @@ export type ActiveSubscription = {
   is_unlimited_documents: boolean;
   is_unlimited_users: boolean;
   is_launch_offer: boolean;
+  has_audit_log: boolean;
   status: SubscriptionStatus;
   expires_at: string | null;
 };

@@ -18,6 +18,7 @@ Les plans sont stockés en base de données dans la table `plans`. **Aucun prix 
 | `is_unlimited_documents` | false |
 | `is_unlimited_users` | false |
 | `is_launch_offer` | false |
+| `has_audit_log` | false |
 
 Fonctionnalités :
 - Jusqu'à 100 pièces par mois (reçus, bons de caisse, bons de sortie)
@@ -38,6 +39,7 @@ Fonctionnalités :
 | `is_unlimited_documents` | false |
 | `is_unlimited_users` | false |
 | `is_launch_offer` | false |
+| `has_audit_log` | true |
 
 Fonctionnalités :
 - Jusqu'à 1 000 pièces par mois
@@ -59,6 +61,7 @@ Fonctionnalités :
 | `is_unlimited_documents` | true |
 | `is_unlimited_users` | true |
 | `is_launch_offer` | true |
+| `has_audit_log` | true |
 
 Fonctionnalités :
 - Pièces illimitées
@@ -67,6 +70,10 @@ Fonctionnalités :
 - Accompagnement à la reprise de données
 
 **Offre de lancement** : le flag `is_launch_offer = true` permet au marketing de modifier le positionnement sans toucher au code de paiement.
+
+## Capacité du journal d'audit
+
+La colonne `has_audit_log` détermine si le journal d'audit complet est accessible. Starter ne l'inclut pas (`false`) ; Business et Illimité l'incluent (`true`). Cette capacité est vérifiée côté serveur dans la page `/audit` et masquée de la navigation latérale lorsque l'offre ne la fournit pas. L'écriture du journal (triggers PostgreSQL) reste active quel que soit le plan — seule la consultation est restreinte.
 
 ## Règle absolue
 

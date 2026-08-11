@@ -49,6 +49,19 @@ CREATE TABLE IF NOT EXISTS plans (
   updated_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Le journal d'audit consultable est une fonctionnalité d'offre, pas un
+-- mécanisme technique : les écritures continuent d'être tracées pour
+-- tout le monde, y compris sur Starter. Seule la consultation dépend du
+-- plan — de sorte qu'une montée en gamme révèle l'historique déjà
+-- constitué, au lieu de repartir d'une page vide.
+--
+-- Colonne plutôt que liste de slugs dans le code : le marketing peut
+-- ouvrir l'audit à Starter par un UPDATE, sans redéploiement.
+ALTER TABLE plans
+  ADD COLUMN IF NOT EXISTS has_audit_log BOOLEAN NOT NULL DEFAULT true;
+
+UPDATE plans SET has_audit_log = false WHERE slug = 'starter';
+
 ALTER TABLE plans ENABLE ROW LEVEL SECURITY;
 
 -- Les plans sont lisibles par tout utilisateur authentifié : il faut
@@ -193,7 +206,12 @@ ALTER TABLE payment_events ENABLE ROW LEVEL SECURITY;
 -- les authentifiés, mais la fonction est appelée par le client admin
 -- lors du webhook, qui n'a pas de session utilisateur).
 -- =====================================================================
-CREATE OR REPLACE FUNCTION get_active_subscription(p_org_id UUID)
+-- DROP avant CREATE : PostgreSQL refuse de remplacer une fonction dont
+-- le type de retour change, et ce script doit rester rejouable sur une
+-- base où la version précédente existe déjà.
+DROP FUNCTION IF EXISTS get_active_subscription(UUID);
+
+CREATE FUNCTION get_active_subscription(p_org_id UUID)
 RETURNS TABLE (
   subscription_id UUID,
   plan_id UUID,
@@ -206,6 +224,7 @@ RETURNS TABLE (
   is_unlimited_documents BOOLEAN,
   is_unlimited_users BOOLEAN,
   is_launch_offer BOOLEAN,
+  has_audit_log BOOLEAN,
   status subscription_status,
   expires_at TIMESTAMPTZ
 )
@@ -213,6 +232,7 @@ LANGUAGE SQL STABLE SECURITY DEFINER SET search_path = public AS $$
   SELECT s.id, p.id, p.slug, p.name, p.price, p.currency,
          p.document_limit, p.user_limit,
          p.is_unlimited_documents, p.is_unlimited_users, p.is_launch_offer,
+         p.has_audit_log,
          s.status, s.expires_at
   FROM subscriptions s
   JOIN plans p ON p.id = s.plan_id
@@ -299,3 +319,63 @@ CREATE TRIGGER subscriptions_touch BEFORE UPDATE ON subscriptions
 DROP TRIGGER IF EXISTS payments_touch ON payments;
 CREATE TRIGGER payments_touch BEFORE UPDATE ON payments
   FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+
+-- =====================================================================
+-- BALAYAGE — remet les statuts en accord avec l'horloge.
+--
+-- Aucune lecture de l'application ne dépend de cette fonction : partout
+-- la validité se juge sur `expires_at > NOW()`, jamais sur la colonne
+-- `status`. Un abonnement échu cesse donc d'ouvrir des droits à la
+-- seconde près, balayage ou pas.
+--
+-- Ce que la fonction corrige, c'est l'écart entre la base et sa propre
+-- description : une ligne « active » dont la date est passée se lit mal,
+-- fausse un export, et induit en erreur qui inspecte la table.
+--
+-- Elle abandonne aussi les tentatives de paiement restées en plan. Un
+-- clic sur « Commencer » suivi d'une fermeture d'onglet laisse un
+-- abonnement `pending` et un paiement `pending` que rien ne viendra
+-- jamais confirmer : au bout de 24 heures, la fenêtre de paiement de
+-- CinetPay est close, la tentative est perdue pour de bon.
+--
+-- SECURITY DEFINER, sans droit d'exécution pour `authenticated` : seule
+-- la clé de service peut l'appeler.
+-- =====================================================================
+CREATE OR REPLACE FUNCTION sweep_subscriptions()
+RETURNS TABLE (expired INT, abandoned INT)
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_expired   INT;
+  v_abandoned INT;
+BEGIN
+  WITH done AS (
+    UPDATE subscriptions
+       SET status = 'expired'
+     WHERE status = 'active'
+       AND expires_at IS NOT NULL
+       AND expires_at <= NOW()
+    RETURNING 1
+  )
+  SELECT COUNT(*)::INT INTO v_expired FROM done;
+
+  -- Le paiement suit l'abonnement : laisser l'un « en attente » quand
+  -- l'autre est abandonné rendrait le journal incohérent.
+  UPDATE payments
+     SET status = 'expired'
+   WHERE status = 'pending'
+     AND created_at < NOW() - INTERVAL '24 hours';
+
+  WITH done AS (
+    UPDATE subscriptions
+       SET status = 'cancelled', cancelled_at = NOW()
+     WHERE status = 'pending'
+       AND created_at < NOW() - INTERVAL '24 hours'
+    RETURNING 1
+  )
+  SELECT COUNT(*)::INT INTO v_abandoned FROM done;
+
+  RETURN QUERY SELECT v_expired, v_abandoned;
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION sweep_subscriptions() FROM anon, authenticated;

@@ -6,9 +6,11 @@ import { ExportButton } from "@/components/export-button";
 import { Pagination } from "@/components/pagination";
 import { RecordList, type RecordField } from "@/components/record-list";
 import { RowActions } from "@/components/row-actions";
+import { SubscriptionBanner } from "@/components/subscription-banner";
 import { PageHeader } from "@/components/ui/kit";
-import { canDelete, canIssue, requireSession } from "@/lib/auth";
+import { canAdminister, canDelete, canIssue, requireSession } from "@/lib/auth";
 import { readPage } from "@/lib/pagination";
+import { getSubscriptionState } from "@/lib/subscriptions";
 import { createClient } from "@/lib/supabase/server";
 import { formatCurrency, formatDate, type Receipt } from "@/lib/types";
 import { createReceipt, updateReceipt } from "./actions";
@@ -21,9 +23,10 @@ export default async function ReceiptsPage({
 }: {
   searchParams: Promise<{ page?: string }>;
 }) {
-  const { profile } = await requireSession();
+  const { profile, organization } = await requireSession();
   const { page: pageParam } = await searchParams;
   const page = readPage(pageParam);
+  const subscription = await getSubscriptionState(organization.id);
 
   const supabase = await createClient();
   const { data, count } = await supabase
@@ -75,6 +78,11 @@ export default async function ReceiptsPage({
         title="Reçus"
         description="La trace remise à celui qui paie. Chaque reçu porte votre en-tête et un numéro continu."
         action={<ExportButton dataset="recus" />}
+      />
+
+      <SubscriptionBanner
+        state={subscription}
+        canSubscribe={canAdminister(profile.role)}
       />
 
       {editable && (

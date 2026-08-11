@@ -22,6 +22,9 @@ const PUBLIC_PATHS = [
   // Le webhook CinetPay n'a pas de session Supabase : il est public.
   // La sécurité repose sur la vérification serveur auprès de CinetPay.
   "/api/webhooks",
+  // Le planificateur de Vercel non plus. La route se garde elle-même
+  // par `CRON_SECRET` et reste inerte si le secret n'est pas configuré.
+  "/api/cron",
 ];
 
 /** Routes d'entrée dont un utilisateur déjà connecté n'a plus besoin. */
@@ -58,6 +61,17 @@ export async function updateSession(request: NextRequest) {
   if (!isSupabaseConfigured()) return NextResponse.next({ request });
 
   const { pathname } = request.nextUrl;
+
+  // Le banc de rendu des pièces imprimées ne lit ni session ni base : il
+  // compose des données figées dans son propre fichier. La page se garde
+  // elle-même par un `notFound()` en production ; cette seconde condition
+  // évite qu'une erreur de configuration ne l'expose jamais.
+  if (
+    process.env.NODE_ENV !== "production" &&
+    pathname === "/print-preview"
+  ) {
+    return NextResponse.next({ request });
+  }
 
   // Sortie immédiate sur les pages identiques pour tous : aucun cookie à
   // rafraîchir, donc aucun appel au serveur d'authentification.

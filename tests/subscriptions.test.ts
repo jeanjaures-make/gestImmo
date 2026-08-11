@@ -23,6 +23,8 @@ const STARTER: ActiveSubscription = {
   is_unlimited_documents: false,
   is_unlimited_users: false,
   is_launch_offer: false,
+  // Starter ne dispose pas du journal d'audit complet.
+  has_audit_log: false,
   status: "active",
   expires_at: "2026-04-01T00:00:00Z",
 };
@@ -36,6 +38,7 @@ const BUSINESS: ActiveSubscription = {
   price: 6000,
   document_limit: 1000,
   user_limit: 5,
+  has_audit_log: true,
 };
 
 const UNLIMITED: ActiveSubscription = {
@@ -50,6 +53,7 @@ const UNLIMITED: ActiveSubscription = {
   is_unlimited_documents: true,
   is_unlimited_users: true,
   is_launch_offer: true,
+  has_audit_log: true,
 };
 
 describe("plans — contrats métier", () => {
@@ -77,6 +81,25 @@ describe("plans — contrats métier", () => {
     expect(UNLIMITED.is_unlimited_documents).toBe(true);
     expect(UNLIMITED.is_unlimited_users).toBe(true);
     expect(UNLIMITED.is_launch_offer).toBe(true);
+  });
+});
+
+/**
+ * Capacité du journal d'audit : seul Business et Illimité y ont droit.
+ * Starter ne dispose pas de cette capacité — la navigation et la page
+ * /audit s'appuient sur ce booléen, jamais sur le slug du plan.
+ */
+describe("audit — capacité par offre", () => {
+  it("Starter : journal d'audit indisponible", () => {
+    expect(STARTER.has_audit_log).toBe(false);
+  });
+
+  it("Business : journal d'audit disponible", () => {
+    expect(BUSINESS.has_audit_log).toBe(true);
+  });
+
+  it("Illimité : journal d'audit disponible", () => {
+    expect(UNLIMITED.has_audit_log).toBe(true);
   });
 });
 

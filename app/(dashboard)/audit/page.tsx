@@ -17,6 +17,7 @@ import {
 import { hasRole, requireSession } from "@/lib/auth";
 import { readPage } from "@/lib/pagination";
 import { createClient } from "@/lib/supabase/server";
+import { getActiveSubscription } from "@/lib/subscriptions";
 
 export const metadata = { title: "Journal d'audit — CaisseOps" };
 
@@ -90,11 +91,19 @@ export default async function AuditPage({
     page?: string;
   }>;
 }) {
-  const { profile } = await requireSession();
+  const { profile, organization } = await requireSession();
 
   // Le RLS refuse déjà la lecture aux autres rôles ; cette redirection évite
   // d'afficher un écran vide et trompeur.
   if (!hasRole(profile.role, "owner", "manager")) redirect("/dashboard");
+
+  // Le journal complet n'est inclus qu'à partir de l'offre Business.
+  // Starter ne dispose pas de cette capacité : on renvoie le propriétaire
+  // vers la page d'abonnement plutôt que de lui présenter un mur blanc.
+  const subscription = await getActiveSubscription(organization.id);
+  if (!subscription?.has_audit_log) {
+    redirect("/subscribe?reason=audit");
+  }
 
   const {
     entity = "",

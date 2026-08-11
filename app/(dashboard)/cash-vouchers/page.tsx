@@ -6,9 +6,11 @@ import { ExportButton } from "@/components/export-button";
 import { Pagination } from "@/components/pagination";
 import { RecordList, type RecordField } from "@/components/record-list";
 import { RowActions } from "@/components/row-actions";
+import { SubscriptionBanner } from "@/components/subscription-banner";
 import { PageHeader, StatusBadge } from "@/components/ui/kit";
-import { canDelete, canIssue, requireSession } from "@/lib/auth";
+import { canAdminister, canDelete, canIssue, requireSession } from "@/lib/auth";
 import { readPage } from "@/lib/pagination";
+import { getSubscriptionState } from "@/lib/subscriptions";
 import { createClient } from "@/lib/supabase/server";
 import {
   CASH_ACCOUNT_LABELS,
@@ -29,9 +31,10 @@ export default async function CashVouchersPage({
 }: {
   searchParams: Promise<{ page?: string }>;
 }) {
-  const { profile } = await requireSession();
+  const { profile, organization } = await requireSession();
   const { page: pageParam } = await searchParams;
   const page = readPage(pageParam);
+  const subscription = await getSubscriptionState(organization.id);
 
   const supabase = await createClient();
   const { data, count } = await supabase
@@ -88,6 +91,11 @@ export default async function CashVouchersPage({
         title="Bons de caisse"
         description="Chaque entrée et chaque sortie d'espèces, avec l'ordre qui l'a autorisée."
         action={<ExportButton dataset="bons-de-caisse" />}
+      />
+
+      <SubscriptionBanner
+        state={subscription}
+        canSubscribe={canAdminister(profile.role)}
       />
 
       {editable && (

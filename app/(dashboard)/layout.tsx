@@ -8,6 +8,7 @@ import { StaffNav } from "@/components/staff-nav";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button, StatusBadge } from "@/components/ui/kit";
 import { requireSession } from "@/lib/auth";
+import { getActiveSubscription } from "@/lib/subscriptions";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { ROLE_LABELS } from "@/lib/types";
 
@@ -31,6 +32,13 @@ export default async function DashboardLayout({
   // Redirige vers /login ou /onboarding selon l'état du compte.
   const { profile, organization, email } = await requireSession();
 
+  // Le journal d'audit n'entre dans la navigation que si l'offre le
+  // comprend. Sans abonnement actif, on s'aligne sur l'entrée de gamme :
+  // l'écran resterait de toute façon sans intérêt, plus rien ne pouvant
+  // être émis. `getActiveSubscription` est mémoïsée pour le rendu, les
+  // pages qui la rappellent ne paient pas une seconde requête.
+  const subscription = await getActiveSubscription(organization.id);
+
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
       <div className="print:hidden">
@@ -38,6 +46,7 @@ export default async function DashboardLayout({
           organizationName={organization.name}
           logoUrl={organization.logo_url}
           role={profile.role}
+          hasAuditLog={subscription?.has_audit_log ?? false}
         />
       </div>
 

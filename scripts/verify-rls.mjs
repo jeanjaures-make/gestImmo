@@ -50,7 +50,7 @@ const admin = createClient(URL, env.SUPABASE_SERVICE_ROLE_KEY, {
 
 const PWD = "Verif-" + Math.random().toString(36).slice(2) + "-Aa1!";
 const stamp = Date.now();
-const created = { users: [], orgs: [] };
+const created = { users: [], orgs: [], transactions: [] };
 let failures = 0;
 
 /** Une assertion : le message décrit ce qui DOIT être vrai. */
@@ -135,10 +135,17 @@ const voucherDraft = (orgId) => ({
  */
 const CLEANUP_ORDER = [
   "delivery_note_lines", "delivery_notes", "cash_vouchers", "receipts",
-  "document_counters", "audit_logs", "profiles",
+  "document_counters", "audit_logs", "payments", "subscriptions", "profiles",
 ];
 
 async function cleanup() {
+  // `payment_events` n'est pas rattachée à une organisation : la
+  // notification arrive avant qu'on sache à qui elle appartient. On la
+  // nettoie donc par les identifiants de transaction que l'on a émis.
+  if (created.transactions.length) {
+    await admin.from("payment_events")
+      .delete().in("transaction_id", created.transactions);
+  }
   for (const orgId of created.orgs) {
     for (const table of CLEANUP_ORDER) {
       await admin.from(table).delete().eq("organization_id", orgId);
@@ -412,6 +419,150 @@ try {
     "un propriétaire promeut toujours un collaborateur",
     `rôle resté ${promoted.role}${promoteErr ? ` (${promoteErr.message})` : ""}`,
   );
+
+  /**
+   * ABONNEMENTS ET PAIEMENTS
+   *
+   * L'argent est la surface la plus tentante du produit. Trois choses
+   * doivent tenir en base, indépendamment de ce que fait le code :
+   *
+   *   — le tarif est public en lecture (il faut bien l'afficher) mais
+   *     jamais modifiable par un client, sinon on s'abonne à 1 franc ;
+   *   — nul ne fait passer son propre paiement à « payé » : cette
+   *     transition n'appartient qu'au webhook, après vérification chez
+   *     CinetPay, via la clé service_role ;
+   *   — une organisation ne voit ni les abonnements ni les paiements
+   *     d'une autre.
+   */
+  console.log("\nABONNEMENTS ET PAIEMENTS");
+
+  const { data: plans, error: plansErr } = await a.client
+    .from("plans").select("*").order("price");
+
+  if (plansErr || !plans?.length) {
+    fail(
+      "aucun plan lisible — exécutez supabase/subscriptions.sql" +
+        (plansErr ? ` (${plansErr.message})` : ""),
+    );
+  } else {
+    check(plans.length >= 3, `les offres sont lisibles (${plans.length})`);
+
+    const starter = plans.find((p) => p.slug === "starter");
+    const unlimited = plans.find((p) => p.slug === "unlimited");
+
+    check(
+      Number(starter?.price) === 3000 && starter?.currency === "XOF",
+      "le tarif Starter fait foi en base, pas dans le code",
+      `obtenu : ${starter?.price} ${starter?.currency}`,
+    );
+
+    // Le plan illimité ne s'exprime pas par un nombre très grand : la
+    // colonne est nulle et deux drapeaux le disent.
+    check(
+      unlimited?.is_unlimited_documents === true &&
+        unlimited?.document_limit === null,
+      "l'offre illimitée est décrite par un drapeau, non par 999999999",
+      `limite : ${unlimited?.document_limit}`,
+    );
+
+    await a.client.from("plans").update({ price: 1 }).eq("id", starter.id);
+    const { data: priceAfter } = await admin.from("plans")
+      .select("price").eq("id", starter.id).single();
+    check(
+      Number(priceAfter.price) === 3000,
+      "un client ne peut pas se fabriquer un tarif à 1 franc",
+      `tarif devenu ${priceAfter.price}`,
+    );
+
+    // Souscription : le propriétaire seul ouvre un abonnement.
+    const { data: sub, error: subErr } = await a.client
+      .from("subscriptions")
+      .insert({ organization_id: a.orgId, plan_id: starter.id, status: "pending" })
+      .select().single();
+    check(!subErr, "le propriétaire ouvre un abonnement", subErr?.message);
+
+    const { error: cashierSubErr } = await cashier.client
+      .from("subscriptions")
+      .insert({ organization_id: a.orgId, plan_id: starter.id, status: "pending" });
+    check(
+      Boolean(cashierSubErr),
+      "le caissier ne souscrit pas au nom de l'entreprise",
+      "l'abonnement a été accepté",
+    );
+
+    if (sub) {
+      // Le montant est celui du plan : c'est le serveur qui l'inscrit.
+      const tx = `VERIF-${stamp}`;
+      created.transactions.push(tx);
+
+      const { data: payment, error: payErr } = await a.client
+        .from("payments").insert({
+          organization_id: a.orgId, user_id: a.id,
+          subscription_id: sub.id, plan_id: starter.id,
+          transaction_id: tx, amount: starter.price,
+          currency: starter.currency, status: "pending",
+        }).select().single();
+      check(!payErr, "le paiement est enregistré en attente", payErr?.message);
+
+      // Le doublon est écarté par la base : c'est ce qui rend le webhook
+      // rejouable sans risque de compter deux fois.
+      const { error: dupErr } = await a.client.from("payments").insert({
+        organization_id: a.orgId, plan_id: starter.id,
+        transaction_id: tx, amount: starter.price,
+        currency: starter.currency, status: "pending",
+      });
+      check(
+        Boolean(dupErr),
+        `un identifiant de transaction déjà utilisé est refusé (${dupErr?.code ?? "—"})`,
+      );
+
+      if (payment) {
+        await a.client.from("payments")
+          .update({ status: "paid", paid_at: new Date().toISOString() })
+          .eq("id", payment.id);
+        const { data: payAfter } = await admin.from("payments")
+          .select("status").eq("id", payment.id).single();
+        check(
+          payAfter.status === "pending",
+          "nul ne déclare son propre paiement acquitté",
+          `statut devenu ${payAfter.status}`,
+        );
+      }
+
+      await a.client.from("subscriptions")
+        .update({ status: "active", expires_at: "2099-01-01T00:00:00Z" })
+        .eq("id", sub.id);
+      const { data: subAfter } = await admin.from("subscriptions")
+        .select("status").eq("id", sub.id).single();
+      check(
+        subAfter.status === "pending",
+        "nul ne s'active un abonnement sans passer par le paiement",
+        `statut devenu ${subAfter.status}`,
+      );
+
+      for (const t of ["subscriptions", "payments"]) {
+        const { data } = await b.client.from(t).select("*");
+        const foreign = (data ?? []).filter((r) => r.organization_id === a.orgId);
+        check(
+          foreign.length === 0,
+          `${t} : B ne voit rien de A`,
+          `${foreign.length} ligne(s) de A visible(s)`,
+        );
+      }
+
+      // Le journal des notifications contient les réponses brutes de
+      // CinetPay : il reste hors de portée de tout client.
+      await admin.from("payment_events").insert({
+        transaction_id: tx, event_type: "verification", payload: { probe: true },
+      });
+      const { data: events } = await a.client.from("payment_events").select("*");
+      check(
+        (events ?? []).length === 0,
+        "le journal des notifications de paiement est inaccessible aux clients",
+        `${(events ?? []).length} entrée(s) visible(s)`,
+      );
+    }
+  }
 
   console.log("\nRECHERCHE GLOBALE");
   // La fonction n'est pas SECURITY DEFINER : le RLS s'y applique. Une

@@ -17,11 +17,16 @@ export const metadata = { title: "Abonnement — CaisseOps" };
  * garde, un caissier verrait des boutons qui échouent en base — une
  * impasse plutôt qu'un refus lisible.
  */
-export default async function SubscribePage() {
+export default async function SubscribePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ reason?: string }>;
+}) {
   const { organization, profile } = await requireSession();
   if (!canAdminister(profile.role)) redirect("/dashboard");
 
-  const [plans, activeSub] = await Promise.all([
+  const [{ reason }, plans, activeSub] = await Promise.all([
+    searchParams,
     getActivePlans(),
     getActiveSubscription(organization.id),
   ]);
@@ -34,6 +39,16 @@ export default async function SubscribePage() {
         title="Choisissez votre plan"
         description="Souscrivez en ligne via CinetPay. Paiement de test en Sandbox — aucune somme réelle n'est débitée."
       />
+
+      {reason === "audit" && (
+        <div className="mb-6 rounded-lg border border-warning/40 bg-warning/5 p-4 text-sm">
+          <p className="font-medium">Journal d&apos;audit indisponible sur votre offre</p>
+          <p className="mt-0.5 text-muted-foreground">
+            Le journal complet est inclus à partir de l&apos;offre Business.
+            Choisissez un plan ci-dessous pour y accéder.
+          </p>
+        </div>
+      )}
 
       {activeSub && (
         <div className="mb-6 rounded-lg border border-success/40 bg-success/5 p-4 text-sm">
