@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 
 import { Button, Input } from "@/components/ui/kit";
@@ -45,6 +45,23 @@ export function DeliveryLines({ lines }: { lines?: DeliveryNoteLine[] }) {
       ? lines.map((line, index) => ({ key: index, ...line }))
       : Array.from({ length: INITIAL_ROWS }, (_, key) => ({ key, ...EMPTY })),
   );
+
+  // Le composant rend deux jeux d'inputs — cartes empilées sur mobile,
+  // tableau sur desktop — qui partagent le même état React. Sans cela,
+  // remplir la version visible remplit aussi la cachée (même `value`),
+  // et les deux soumettent leurs champs : on enregistrait alors le double
+  // des lignes saisies.
+  //
+  // `name` n'est posé que sur le jeu visible : l'autre est ignoré par le
+  // navigateur lors de la soumission du formulaire.
+  const [isDesktop, setIsDesktop] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 768px)");
+    const sync = () => setIsDesktop(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
 
   function addRow() {
     setRows((current) => [
@@ -102,7 +119,7 @@ export function DeliveryLines({ lines }: { lines?: DeliveryNoteLine[] }) {
             </div>
             <div className="flex flex-col gap-2">
               <Input
-                name="designation"
+                name={isDesktop ? undefined : "designation"}
                 value={row.designation}
                 onChange={(e) =>
                   update(row.key, "designation", e.target.value)
@@ -111,7 +128,7 @@ export function DeliveryLines({ lines }: { lines?: DeliveryNoteLine[] }) {
                 placeholder="Désignation"
               />
               <Input
-                name="quantity"
+                name={isDesktop ? undefined : "quantity"}
                 value={row.quantity}
                 onChange={(e) => update(row.key, "quantity", e.target.value)}
                 aria-label={`Quantité, ligne ${index + 1}`}
@@ -119,7 +136,7 @@ export function DeliveryLines({ lines }: { lines?: DeliveryNoteLine[] }) {
                 inputMode="numeric"
               />
               <Input
-                name="destination"
+                name={isDesktop ? undefined : "destination"}
                 value={row.destination}
                 onChange={(e) =>
                   update(row.key, "destination", e.target.value)
@@ -128,7 +145,7 @@ export function DeliveryLines({ lines }: { lines?: DeliveryNoteLine[] }) {
                 placeholder="Destination"
               />
               <Input
-                name="observations"
+                name={isDesktop ? undefined : "observations"}
                 value={row.observations}
                 onChange={(e) =>
                   update(row.key, "observations", e.target.value)
@@ -158,7 +175,7 @@ export function DeliveryLines({ lines }: { lines?: DeliveryNoteLine[] }) {
               <tr key={row.key}>
                 <td className="pr-1.5">
                   <Input
-                    name="designation"
+                    name={isDesktop ? "designation" : undefined}
                     value={row.designation}
                     onChange={(e) =>
                       update(row.key, "designation", e.target.value)
@@ -169,7 +186,7 @@ export function DeliveryLines({ lines }: { lines?: DeliveryNoteLine[] }) {
                 </td>
                 <td className="pr-1.5">
                   <Input
-                    name="quantity"
+                    name={isDesktop ? "quantity" : undefined}
                     value={row.quantity}
                     onChange={(e) => update(row.key, "quantity", e.target.value)}
                     aria-label={`Quantité, ligne ${index + 1}`}
@@ -178,7 +195,7 @@ export function DeliveryLines({ lines }: { lines?: DeliveryNoteLine[] }) {
                 </td>
                 <td className="pr-1.5">
                   <Input
-                    name="destination"
+                    name={isDesktop ? "destination" : undefined}
                     value={row.destination}
                     onChange={(e) =>
                       update(row.key, "destination", e.target.value)
@@ -189,7 +206,7 @@ export function DeliveryLines({ lines }: { lines?: DeliveryNoteLine[] }) {
                 </td>
                 <td className="pr-1.5">
                   <Input
-                    name="observations"
+                    name={isDesktop ? "observations" : undefined}
                     value={row.observations}
                     onChange={(e) =>
                       update(row.key, "observations", e.target.value)

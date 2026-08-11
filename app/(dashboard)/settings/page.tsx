@@ -240,7 +240,12 @@ export default async function SettingsPage() {
                   Tel qu&apos;il s&apos;imprimera, une fois vos modifications
                   enregistrées.
                 </p>
-                <div className="overflow-x-auto rounded-lg border bg-white p-4">
+                <div
+                  className="overflow-x-auto rounded-lg border bg-white p-4"
+                  tabIndex={0}
+                  role="region"
+                  aria-label="Aperçu de l'en-tête imprimé"
+                >
                   <LetterheadPreview organization={organization} />
                 </div>
               </CardContent>
