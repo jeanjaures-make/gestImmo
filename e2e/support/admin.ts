@@ -95,7 +95,7 @@ export async function setPassword(email: string, password = TEST_PASSWORD) {
  */
 const CHILDREN = [
   "delivery_note_lines", "delivery_notes", "cash_vouchers", "receipts",
-  "document_counters", "audit_logs", "profiles",
+  "document_counters", "audit_logs", "payments", "subscriptions", "profiles",
 ];
 
 export async function deleteOrganizationsNamed(prefix: string) {

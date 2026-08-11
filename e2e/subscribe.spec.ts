@@ -11,7 +11,7 @@ import {
 /**
  * Parcours d'abonnement : ce que voit un propriétaire qui choisit un plan,
  * et ce que voit un membre non propriétaire qui tente d'y accéder.
-
+ *
  * Comme `journey.spec.ts`, ce test écrit dans une vraie base de développement
  * et nettoie derrière lui. Il ne s'exécute pas contre des doublures : les
  * prix et limites doivent venir de la table `plans`, pas du code.
@@ -95,23 +95,32 @@ test("plans affichés depuis la base, accès réservé au propriétaire", async 
     email_confirm: true,
   });
 
-  await admin().from("profiles").insert({
+  // Le champ `email` est NOT NULL dans la table profiles.
+  const { error: profileErr } = await admin().from("profiles").insert({
     id: newUser.user!.id,
     organization_id: orgId,
     firstname: "Membre",
     lastname: "Test",
+    email: memberEmail,
     role: "viewer",
   });
+  expect(profileErr).toBeNull();
 
-  // Déconnexion du propriétaire (POST-only), puis connexion du membre.
-  await page.request.post("/auth/signout");
+  // Déconnexion du propriétaire via le bouton de l'en-tête, puis connexion
+  // du membre. Le bouton « Déconnexion » est un formulaire POST vers
+  // /auth/signout — on le soumet en cliquant.
+  await page.getByRole("button", { name: /Déconnexion/i }).click();
+  await page.waitForURL("**/");
+
   await page.goto("/login");
   await page.getByLabel("Adresse e-mail").fill(memberEmail);
   await page.getByLabel("Mot de passe").fill(TEST_PASSWORD);
   await page.getByRole("button", { name: "Se connecter" }).click();
   await page.waitForURL("**/dashboard");
 
-  // Le lien « Abonnement » ne doit pas apparaître dans la navigation.
+  // Le lien « Abonnement » ne doit pas apparaître dans la navigation :
+  // la sidebar filtre les items par rôle, et ce lien est réservé au
+  // propriétaire. L'élément n'est pas dans le DOM (pas seulement masqué).
   await expect(
     page.getByRole("link", { name: "Abonnement" }),
   ).toHaveCount(0);
