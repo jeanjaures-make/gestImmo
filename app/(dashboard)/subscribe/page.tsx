@@ -1,6 +1,8 @@
+import { redirect } from "next/navigation";
+
 import { PlanCard } from "@/components/plan-card";
 import { PageHeader } from "@/components/ui/kit";
-import { requireSession } from "@/lib/auth";
+import { canAdminister, requireSession } from "@/lib/auth";
 import { getActivePlans, getActiveSubscription } from "@/lib/subscriptions";
 
 export const metadata = { title: "Abonnement — CaisseOps" };
@@ -9,10 +11,16 @@ export const metadata = { title: "Abonnement — CaisseOps" };
  * Page de sélection du plan.
  *
  * Les plans viennent de la base de données — jamais codés en dur.
- * Si l'utilisateur n'est pas connecté, il est redirigé vers /login.
+ *
+ * Réservée au propriétaire : c'est lui qui engage la dépense, et la
+ * policy d'insertion sur `subscriptions` n'autorise que lui. Sans cette
+ * garde, un caissier verrait des boutons qui échouent en base — une
+ * impasse plutôt qu'un refus lisible.
  */
 export default async function SubscribePage() {
-  const { organization } = await requireSession();
+  const { organization, profile } = await requireSession();
+  if (!canAdminister(profile.role)) redirect("/dashboard");
+
   const [plans, activeSub] = await Promise.all([
     getActivePlans(),
     getActiveSubscription(organization.id),

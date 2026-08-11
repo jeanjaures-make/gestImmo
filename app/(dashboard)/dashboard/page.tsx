@@ -22,7 +22,9 @@ import {
   type ReceiptsPoint,
 } from "@/components/charts";
 import { PeriodSelector } from "@/components/period-selector";
+import { SubscriptionBanner } from "@/components/subscription-banner";
 import { readPeriod } from "@/lib/periods";
+import { getSubscriptionState } from "@/lib/subscriptions";
 import {
   Card,
   CardContent,
@@ -31,7 +33,7 @@ import {
   EmptyState,
   PageHeader,
 } from "@/components/ui/kit";
-import { hasRole, requireSession } from "@/lib/auth";
+import { canAdminister, hasRole, requireSession } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { formatCompactCurrency } from "@/lib/money";
 import { formatCurrency, formatDate, type DocumentKind } from "@/lib/types";
@@ -137,10 +139,11 @@ export default async function DashboardPage({
 }: {
   searchParams: Promise<{ months?: string }>;
 }) {
-  const { profile } = await requireSession();
+  const { profile, organization } = await requireSession();
   const { months: monthsParam } = await searchParams;
 
   const period = readPeriod(monthsParam);
+  const subscription = await getSubscriptionState(organization.id);
 
   const supabase = await createClient();
   const months = lastMonths(period);
@@ -373,6 +376,11 @@ export default async function DashboardPage({
       <PageHeader
         title="Vue d'ensemble"
         description="Ce qui est entré, ce qui est sorti, et ce qui reste à recouvrer."
+      />
+
+      <SubscriptionBanner
+        state={subscription}
+        canSubscribe={canAdminister(profile.role)}
       />
 
       {/* Les quatre indicateurs décisifs d'abord : deux colonnes sur

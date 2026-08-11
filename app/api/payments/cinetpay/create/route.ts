@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { getSession } from "@/lib/auth";
+import { canAdminister, getSession } from "@/lib/auth";
 import {
   createCinetpayPayment,
   generateTransactionId,
@@ -30,6 +30,16 @@ export async function POST(request: NextRequest) {
   const session = await getSession();
   if (!session || session === "no-profile") {
     return NextResponse.json({ error: "Non authentifié." }, { status: 401 });
+  }
+
+  // Le rôle est vérifié ici et non seulement par le RLS : sans cela, un
+  // caissier obtenait un 500 opaque au moment de l'insertion, après
+  // qu'un identifiant de transaction ait déjà été émis.
+  if (!canAdminister(session.profile.role)) {
+    return NextResponse.json(
+      { error: "Seul le propriétaire peut souscrire un abonnement." },
+      { status: 403 },
+    );
   }
 
   // CinetPay doit être configuré

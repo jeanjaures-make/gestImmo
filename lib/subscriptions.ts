@@ -1,28 +1,88 @@
 import "server-only";
+import { cache } from "react";
 
 import { createClient } from "@/lib/supabase/server";
-import type { ActiveSubscription, Plan } from "@/lib/types";
+import type { ActiveSubscription, Plan, SubscriptionStatus } from "@/lib/types";
 
 /**
  * Récupère l'abonnement actif d'une organisation.
  *
- * Retourne `null` si aucune organisation n'a d'abonnement actif — c'est
- * le cas d'une nouvelle inscription, qui n'a pas encore choisi de plan.
- * Le produit reste utilisable (période d'essai implicite), mais les
- * quotas ne sont pas levés pour autant : sans abonnement, on retombe sur
- * les limites du plan gratuit (aucune pièce).
+ * Retourne `null` si l'organisation n'a aucun abonnement en cours de
+ * validité — nouvelle inscription, ou abonnement échu. Sans abonnement,
+ * les pièces ne peuvent plus être émises : le produit n'est pas gratuit.
  *
- * La fonction est mise en cache par React via `cache()` côté appelant
- * si nécessaire — ici on reste simple.
+ * `cache()` déduplique l'appel sur la durée du rendu : le bandeau, la
+ * page et la garde de quota l'appellent chacun sans multiplier les
+ * allers-retours vers PostgreSQL.
  */
-export async function getActiveSubscription(
+export const getActiveSubscription = cache(async (
   organizationId: string,
-): Promise<ActiveSubscription | null> {
+): Promise<ActiveSubscription | null> => {
   const supabase = await createClient();
   const { data } = await supabase
     .rpc("get_active_subscription", { p_org_id: organizationId })
     .maybeSingle<ActiveSubscription>();
   return data ?? null;
+});
+
+/**
+ * L'état d'abonnement tel qu'on l'affiche à l'écran.
+ *
+ * `getActiveSubscription()` ne distingue pas « jamais souscrit » de
+ * « souscrit puis échu » : les deux valent `null`. Or les deux appellent
+ * des messages différents — l'un propose de découvrir les offres,
+ * l'autre de renouveler un plan que l'on connaît déjà. Cette fonction
+ * lit donc le dernier abonnement quel que soit son statut.
+ */
+export type SubscriptionState =
+  | { state: "none" }
+  | { state: "active"; subscription: ActiveSubscription; used: number }
+  | { state: "expired"; planName: string; planId: string; expiredOn: string };
+
+export const getSubscriptionState = cache(async (
+  organizationId: string,
+): Promise<SubscriptionState> => {
+  const active = await getActiveSubscription(organizationId);
+
+  if (active) {
+    const used = await countDocumentsThisPeriod(organizationId);
+    return { state: "active", subscription: active, used };
+  }
+
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("subscriptions")
+    .select("plan_id, status, expires_at, plans(name)")
+    .eq("organization_id", organizationId)
+    .not("expires_at", "is", null)
+    .order("expires_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<{
+      plan_id: string;
+      status: SubscriptionStatus;
+      expires_at: string;
+      plans: { name: string } | null;
+    }>();
+
+  if (!data) return { state: "none" };
+
+  return {
+    state: "expired",
+    planId: data.plan_id,
+    planName: data.plans?.name ?? "précédent",
+    expiredOn: data.expires_at,
+  };
+});
+
+/** Nombre de pièces émises sur la période d'abonnement en cours. */
+export async function countDocumentsThisPeriod(
+  organizationId: string,
+): Promise<number> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .rpc("count_documents_this_period", { p_org_id: organizationId })
+    .maybeSingle<number>();
+  return Number(data ?? 0);
 }
 
 /**
@@ -80,17 +140,13 @@ export async function checkDocumentQuota(
     return { allowed: false, used: 0, limit: 0, planName: "Aucun" };
   }
 
-  // Illimité : pas de quota.
+  // Illimité : pas de quota. On évite même de compter — sur une
+  // organisation qui émet beaucoup, ce décompte est la requête la plus
+  // lourde de la création d'une pièce.
   if (sub.is_unlimited_documents) return { allowed: true };
 
   const limit = sub.document_limit ?? 0;
-
-  const supabase = await createClient();
-  const { data: used } = await supabase
-    .rpc("count_documents_this_period", { p_org_id: organizationId })
-    .maybeSingle<number>();
-
-  const count = Number(used ?? 0);
+  const count = await countDocumentsThisPeriod(organizationId);
 
   if (count >= limit) {
     return { allowed: false, used: count, limit, planName: sub.plan_name };
@@ -101,10 +157,10 @@ export async function checkDocumentQuota(
 /**
  * Vérifie si l'organisation peut inviter un nouvel utilisateur.
  *
- * Le propriétaire ne compte pas dans la limite : un plan Starter à 1
- * utilisateur signifie « 1 utilisateur en plus du propriétaire », pas
- * « 1 utilisateur total » — sinon l'organisation serait vide dès
- * l'inscription.
+ * Le propriétaire est compté : « 1 utilisateur » sur Starter désigne le
+ * poste unique de l'entreprise, pas un collaborateur en plus du patron.
+ * Une organisation Starter ne peut donc inviter personne — c'est
+ * précisément ce qui distingue l'offre de Business.
  */
 export async function checkUserLimit(
   organizationId: string,
@@ -132,8 +188,6 @@ export async function checkUserLimit(
 
   const count = Number(current ?? 0);
 
-  // Le propriétaire est toujours autorisé à exister : la limite
-  // s'applique aux invitations, pas au compte initial.
   if (count >= limit) {
     return { allowed: false, current: count, limit, planName: sub.plan_name };
   }

@@ -5,6 +5,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
   Building2,
+  CreditCard,
   LayoutDashboard,
   PackageOpen,
   ReceiptText,
@@ -37,6 +38,9 @@ const NAV: NavItem[] = [
     roles: ["owner", "manager"],
   },
   { href: "/team", label: "Équipe", icon: UserCog, roles: ["owner"] },
+  // Le propriétaire seul : c'est lui qui engage la dépense, et lui seul
+  // que la base autorise à écrire dans `subscriptions`.
+  { href: "/subscribe", label: "Abonnement", icon: CreditCard, roles: ["owner"] },
   { href: "/settings", label: "Réglages", icon: Settings },
 ];
 
