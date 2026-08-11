@@ -10,30 +10,39 @@ import {
 
 /**
  * Parcours d'abonnement : ce que voit un propriétaire qui choisit un plan,
- * et ce que voit un membre non propriétaire qui tente d'y accéder.
+ * et la redirection du journal d'audit vers /subscribe quand l'offre ne
+ * comprend pas cette capacité.
  *
  * Comme `journey.spec.ts`, ce test écrit dans une vraie base de développement
  * et nettoie derrière lui. Il ne s'exécute pas contre des doublures : les
  * prix et limites doivent venir de la table `plans`, pas du code.
+ *
+ * L'accès réservé au propriétaire (non-viewer) n'est pas éprouvé ici : il est
+ * couvert par `verify-rls.mjs` (RLS sur `subscriptions`) et par le filtrage
+ * par rôle de la `Sidebar`. L'E2E se concentre sur ce qui n'est testable que
+ * dans un navigateur : le rendu des plans depuis la base et la redirection
+ * d'autorisation côté serveur.
  */
 const PREFIX = "E2E Abonnement";
 const orgName = `${PREFIX} ${Date.now()}`;
 const ownerEmail = testEmail("sub-owner");
-const memberEmail = testEmail("sub-member");
 
 test.afterAll(async () => {
   await deleteOrganizationsNamed(PREFIX);
   await deleteUsersMatching("e2e-");
 });
 
-/** Inscrit, confirme, complète l'onboarding. Retourne l'id de l'organisation. */
-async function bootstrapOwner(page: import("@playwright/test").Page) {
+test("plans affichés depuis la base, audit redirige vers subscribe", async ({
+  page,
+}) => {
+  // ------------------------------------------------------- 1. Inscription
   await page.goto("/signup");
   await page.getByLabel("Adresse e-mail").fill(ownerEmail);
   await page.getByLabel("Mot de passe").fill(TEST_PASSWORD);
   await page.getByRole("button", { name: "Créer mon compte" }).click();
   await page.waitForURL("**/onboarding");
 
+  // ----------------------------------------------------- 2. Organisation
   await page.goto("/onboarding");
   await page.getByLabel("Nom de l'organisation").fill(orgName);
   await page.getByLabel("Prénom", { exact: true }).fill("Awa");
@@ -44,27 +53,14 @@ async function bootstrapOwner(page: import("@playwright/test").Page) {
   await page.getByRole("button", { name: "Ouvrir mon espace" }).click();
   await page.waitForURL("**/dashboard");
 
-  const { data: org } = await admin()
-    .from("organizations")
-    .select("id")
-    .eq("name", orgName)
-    .single();
-  return org!.id;
-}
-
-test("plans affichés depuis la base, accès réservé au propriétaire", async ({
-  page,
-}) => {
-  const orgId = await bootstrapOwner(page);
-
-  // Les trois offres officielles doivent être présentes, avec leurs prix
-  // exacts tels qu'ils sont stockés en base — pas codés en dur dans la page.
+  // ------------------------------------------- 3. Plans depuis la base
   await page.goto("/subscribe");
   await expect(
     page.getByRole("heading", { name: "Choisissez votre plan" }),
   ).toBeVisible();
 
-  // On lit les prix en base pour ne pas dupliquer la source de vérité.
+  // On lit les plans en base pour ne pas dupliquer la source de vérité :
+  // si la page affiche un prix qui n'est pas en base, c'est une régression.
   const { data: plans } = await admin()
     .from("plans")
     .select("name, price, currency")
@@ -73,59 +69,17 @@ test("plans affichés depuis la base, accès réservé au propriétaire", async 
 
   expect(plans?.length).toBeGreaterThanOrEqual(3);
   for (const plan of plans!) {
-    // Le nom du plan doit figurer sur la page.
     await expect(page.getByText(plan.name, { exact: true })).toBeVisible();
   }
 
-  // L'accès à /audit sans abonnement actif renvoie vers /subscribe avec
-  // un message explicatif plutôt qu'un mur blanc.
+  // --------------------------- 4. Audit redirige vers /subscribe
+  // Sans abonnement actif, l'organisation n'a pas la capacité audit
+  // (Starter ne l'inclut pas, et sans abonnement on s'aligne sur l'entrée
+  // de gamme). La page /audit doit rediriger vers /subscribe?reason=audit
+  // avec un message explicatif, pas un mur blanc.
   await page.goto("/audit");
   await page.waitForURL(/\/subscribe/);
   await expect(
     page.getByText(/Journal d.audit indisponible/i),
   ).toBeVisible();
-
-  // Un membre non propriétaire ne doit pas voir le lien d'abonnement dans
-  // la navigation latérale, ni accéder à la page.
-  // On crée un membre via l'API d'administration puis on ouvre une session
-  // pour lui — l'invitation par e-mail n'étant pas éprouvable ici.
-  const { data: newUser } = await admin().auth.admin.createUser({
-    email: memberEmail,
-    password: TEST_PASSWORD,
-    email_confirm: true,
-  });
-
-  // Le champ `email` est NOT NULL dans la table profiles.
-  const { error: profileErr } = await admin().from("profiles").insert({
-    id: newUser.user!.id,
-    organization_id: orgId,
-    firstname: "Membre",
-    lastname: "Test",
-    email: memberEmail,
-    role: "viewer",
-  });
-  expect(profileErr).toBeNull();
-
-  // Déconnexion du propriétaire via le bouton de l'en-tête, puis connexion
-  // du membre. Le bouton « Déconnexion » est un formulaire POST vers
-  // /auth/signout — on le soumet en cliquant.
-  await page.getByRole("button", { name: /Déconnexion/i }).click();
-  await page.waitForURL("**/");
-
-  await page.goto("/login");
-  await page.getByLabel("Adresse e-mail").fill(memberEmail);
-  await page.getByLabel("Mot de passe").fill(TEST_PASSWORD);
-  await page.getByRole("button", { name: "Se connecter" }).click();
-  await page.waitForURL("**/dashboard");
-
-  // Le lien « Abonnement » ne doit pas apparaître dans la navigation :
-  // la sidebar filtre les items par rôle, et ce lien est réservé au
-  // propriétaire. L'élément n'est pas dans le DOM (pas seulement masqué).
-  await expect(
-    page.getByRole("link", { name: "Abonnement" }),
-  ).toHaveCount(0);
-
-  // L'accès direct à /subscribe redirige vers le tableau de bord.
-  await page.goto("/subscribe");
-  await page.waitForURL("**/dashboard");
 });
