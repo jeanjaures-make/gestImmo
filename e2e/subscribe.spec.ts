@@ -1,6 +1,10 @@
+import { mkdir } from "node:fs/promises";
+import { dirname } from "node:path";
+
 import { test, expect } from "@playwright/test";
 
 import {
+  admin,
   deleteOrganizationsNamed,
   deleteUsersMatching,
   testEmail,
@@ -12,50 +16,77 @@ import {
  * et la redirection du journal d'audit vers /subscribe quand l'offre ne
  * comprend pas cette capacité.
  *
- * Comme `journey.spec.ts`, ce test écrit dans une vraie base de développement
- * et nettoie derrière lui. Il ne s'exécute pas contre des doublures : les
- * prix et limites doivent venir de la table `plans`, pas du code.
- *
- * L'accès réservé au propriétaire (non-viewer) n'est pas éprouvé ici : il est
- * couvert par `verify-rls.mjs` (RLS sur `subscriptions`) et par le filtrage
- * par rôle de la `Sidebar`. L'E2E se concentre sur ce qui n'est testable que
- * dans un navigateur : le rendu des plans depuis la base et la redirection
- * d'autorisation côté serveur.
+ * Le compte et l'organisation sont créés via l'API admin (comme
+ * `accessibility.spec.ts`), pas via le formulaire public : l'inscription et
+ * l'onboarding sont déjà éprouvés par `journey.spec.ts`. Ce test se concentre
+ * sur ce qui n'est testable qu'en navigateur : le rendu des plans depuis la
+ * base et la redirection d'autorisation côté serveur.
  */
 const PREFIX = "E2E Abonnement";
 const orgName = `${PREFIX} ${Date.now()}`;
 const ownerEmail = testEmail("sub-owner");
+const SESSION = "e2e/.auth/subscribe.json";
+const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
 
 test.afterAll(async () => {
   await deleteOrganizationsNamed(PREFIX);
   await deleteUsersMatching("e2e-");
 });
 
+test.beforeAll(async ({ browser }) => {
+  const { data: user, error } = await admin().auth.admin.createUser({
+    email: ownerEmail,
+    password: TEST_PASSWORD,
+    email_confirm: true,
+  });
+  if (error) throw new Error(`compte : ${error.message}`);
+
+  const { data: org, error: orgErr } = await admin()
+    .from("organizations")
+    .insert({
+      name: orgName,
+      slug: `sub-${Date.now()}`,
+      legal_form: "S.A.R.L.",
+      address: "Zone industrielle de Vridi, Abidjan",
+      phone: "+225 27 21 00 00 00",
+    })
+    .select("id")
+    .single();
+  if (orgErr) throw new Error(`organisation : ${orgErr.message}`);
+
+  const { error: profileErr } = await admin().from("profiles").insert({
+    id: user.user.id,
+    organization_id: org.id,
+    firstname: "Awa",
+    lastname: "Diallo",
+    email: ownerEmail,
+    role: "owner",
+  });
+  if (profileErr) throw new Error(`profil : ${profileErr.message}`);
+
+  // Pas d'abonnement : on veut éprouver la redirection /audit → /subscribe
+  // qui se produit précisément quand l'organisation n'a pas la capacité audit.
+
+  // Ouvre une session une seule fois et conserve les cookies.
+  const context = await browser.newContext({ baseURL: BASE_URL });
+  const page = await context.newPage();
+  await page.goto("/login");
+  await page.getByLabel("Adresse e-mail").fill(ownerEmail);
+  await page.getByLabel("Mot de passe").fill(TEST_PASSWORD);
+  await page.getByRole("button", { name: "Se connecter" }).click();
+  await page.waitForURL("**/dashboard");
+
+  await mkdir(dirname(SESSION), { recursive: true });
+  await context.storageState({ path: SESSION });
+  await context.close();
+});
+
+test.use({ storageState: SESSION });
+
 test("plans affichés depuis la base, audit redirige vers subscribe", async ({
   page,
 }) => {
-  // ------------------------------------------------------- 1. Inscription
-  await page.goto("/signup");
-  await page.getByLabel("Adresse e-mail").fill(ownerEmail);
-  await page.getByLabel("Mot de passe").fill(TEST_PASSWORD);
-  await page.getByRole("button", { name: "Créer mon compte" }).click();
-  await page.waitForURL("**/onboarding");
-
-  // ----------------------------------------------------- 2. Organisation
-  await page.goto("/onboarding");
-  await page.getByLabel("Nom de l'organisation").fill(orgName);
-  await page.getByLabel("Prénom", { exact: true }).fill("Awa");
-  await page.getByLabel("Nom", { exact: true }).fill("Diallo");
-  await page.getByLabel("Forme juridique").fill("S.A.R.L.");
-  await page.getByLabel("Téléphone").fill("+225 27 21 00 00 00");
-  await page.getByLabel("Adresse", { exact: true }).fill("Zone industrielle de Vridi");
-  await page.getByRole("button", { name: "Ouvrir mon espace" }).click();
-  await page.waitForURL("**/dashboard");
-
-  // ------------------------------------------- 3. Plans depuis la base
-  // La page /subscribe charge les plans depuis la base. On vérifie juste
-  // que la page se rend avec au moins une carte de plan — les prix et
-  // limites exacts sont éprouvés par verify-rls.mjs et les tests unitaires.
+  // ------------------------------------------- 1. Plans depuis la base
   await page.goto("/subscribe");
   await expect(
     page.getByRole("heading", { name: "Choisissez votre plan" }),
@@ -67,11 +98,10 @@ test("plans affichés depuis la base, audit redirige vers subscribe", async ({
     page.getByRole("button", { name: /Commencer|Profiter de l.offre/ }),
   ).toHaveCount(3);
 
-  // --------------------------- 4. Audit redirige vers /subscribe
-  // Sans abonnement actif, l'organisation n'a pas la capacité audit
-  // (Starter ne l'inclut pas, et sans abonnement on s'aligne sur l'entrée
-  // de gamme). La page /audit doit rediriger vers /subscribe?reason=audit
-  // avec un message explicatif, pas un mur blanc.
+  // --------------------------- 2. Audit redirige vers /subscribe
+  // Sans abonnement actif, l'organisation n'a pas la capacité audit.
+  // La page /audit doit rediriger vers /subscribe?reason=audit avec un
+  // message explicatif, pas un mur blanc.
   await page.goto("/audit");
   await page.waitForURL(/\/subscribe/);
   await expect(

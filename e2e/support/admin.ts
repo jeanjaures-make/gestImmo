@@ -120,3 +120,36 @@ export async function deleteUsersMatching(prefix: string) {
     }
   }
 }
+
+/**
+ * Active un abonnement Business pour une organisation de test.
+ *
+ * Sans abonnement actif, `checkDocumentQuota` bloque l'émission de pièces
+ * et la page /audit redirige vers /subscribe. Les tests E2E qui créent des
+ * pièces ou auditent /audit doivent donc disposer d'un abonnement actif
+ * avec `has_audit_log: true`.
+ *
+ * L'abonnement est inséré avec la clé service_role : c'est le chemin que
+ * suit le webhook CinetPay après vérification, jamais un parcours client.
+ */
+export async function seedSubscription(orgId: string, planSlug = "business") {
+  const { data: plan, error: planErr } = await admin()
+    .from("plans")
+    .select("id")
+    .eq("slug", planSlug)
+    .single();
+  if (planErr || !plan) {
+    throw new Error(
+      `Plan "${planSlug}" introuvable — exécutez supabase/subscriptions.sql.`,
+    );
+  }
+
+  const { error } = await admin().from("subscriptions").insert({
+    organization_id: orgId,
+    plan_id: plan.id,
+    status: "active",
+    started_at: new Date().toISOString(),
+    expires_at: "2099-12-31T23:59:59Z",
+  });
+  if (error) throw new Error(`seedSubscription : ${error.message}`);
+}

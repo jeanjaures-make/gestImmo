@@ -4,6 +4,7 @@ import {
   admin,
   deleteOrganizationsNamed,
   deleteUsersMatching,
+  seedSubscription,
   testEmail,
   TEST_PASSWORD,
 } from "./support/admin";
@@ -92,6 +93,12 @@ test("de l'inscription à l'export comptable du premier carnet", async ({
     .single();
   expect(org?.legal_form).toBe("S.A.R.L.");
   expect(org?.phone).toBe("+225 27 21 00 00 00");
+
+  // Abonnement Business : sans abonnement actif, `checkDocumentQuota`
+  // bloque l'émission de pièces. On l'active ici via l'API admin — c'est
+  // le chemin que suit le webhook CinetPay après vérification, pas un
+  // parcours client. Le test éprouve l'émission, pas le paiement.
+  await seedSubscription(org!.id, "business");
 
   // ------------------------------------------------------------ 3. Reçu
   await page.goto("/receipts");

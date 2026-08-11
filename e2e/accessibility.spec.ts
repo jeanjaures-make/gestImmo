@@ -8,6 +8,7 @@ import {
   admin,
   deleteOrganizationsNamed,
   deleteUsersMatching,
+  seedSubscription,
   testEmail,
   TEST_PASSWORD,
 } from "./support/admin";
@@ -178,6 +179,10 @@ test.beforeAll(async ({ browser }) => {
     destination: "Chantier Koumassi",
     observations: "Palettes consignées",
   });
+
+  // Abonnement Business : nécessaire pour que /audit ne redirige pas vers
+  // /subscribe (la capacité audit vient de la colonne has_audit_log).
+  await seedSubscription(org, "business");
 
   await saveSession(browser);
 });
