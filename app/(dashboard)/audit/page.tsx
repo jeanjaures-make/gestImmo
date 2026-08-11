@@ -100,8 +100,12 @@ export default async function AuditPage({
   // Le journal complet n'est inclus qu'à partir de l'offre Business.
   // Starter ne dispose pas de cette capacité : on renvoie le propriétaire
   // vers la page d'abonnement plutôt que de lui présenter un mur blanc.
+  //
+  // `=== false` (et non `!`) pour compatibilité ascendante : si la colonne
+  // `has_audit_log` n'existe pas encore en base, la RPC renvoie `undefined`,
+  // et l'ancien comportement (accès libre) est préservé.
   const subscription = await getActiveSubscription(organization.id);
-  if (!subscription?.has_audit_log) {
+  if (!subscription || subscription.has_audit_log === false) {
     redirect("/subscribe?reason=audit");
   }
 

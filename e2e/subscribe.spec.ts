@@ -81,30 +81,35 @@ test.beforeAll(async ({ browser }) => {
   await context.close();
 });
 
-test.use({ storageState: SESSION });
+// `test.use` est dans un `describe` pour ne pas s'appliquer à `beforeAll` :
+// sinon Playwright injecte le `storageState` dans `browser.newContext()`
+// du hook, qui échoue car le fichier n'existe pas encore.
+test.describe("subscribe", () => {
+  test.use({ storageState: SESSION });
 
-test("plans affichés depuis la base, audit redirige vers subscribe", async ({
-  page,
-}) => {
-  // ------------------------------------------- 1. Plans depuis la base
-  await page.goto("/subscribe");
-  await expect(
-    page.getByRole("heading", { name: "Choisissez votre plan" }),
-  ).toBeVisible();
+  test("plans affichés depuis la base, audit redirige vers subscribe", async ({
+    page,
+  }) => {
+    // ------------------------------------------- 1. Plans depuis la base
+    await page.goto("/subscribe");
+    await expect(
+      page.getByRole("heading", { name: "Choisissez votre plan" }),
+    ).toBeVisible();
 
-  // Au moins un bouton « Commencer » ou « Profiter de l'offre » doit être
-  // présent : c'est lui qui déclenche la création de paiement.
-  await expect(
-    page.getByRole("button", { name: /Commencer|Profiter de l.offre/ }),
-  ).toHaveCount(3);
+    // Au moins un bouton « Commencer » ou « Profiter de l'offre » doit être
+    // présent : c'est lui qui déclenche la création de paiement.
+    await expect(
+      page.getByRole("button", { name: /Commencer|Profiter de l.offre/ }),
+    ).toHaveCount(3);
 
-  // --------------------------- 2. Audit redirige vers /subscribe
-  // Sans abonnement actif, l'organisation n'a pas la capacité audit.
-  // La page /audit doit rediriger vers /subscribe?reason=audit avec un
-  // message explicatif, pas un mur blanc.
-  await page.goto("/audit");
-  await page.waitForURL(/\/subscribe/);
-  await expect(
-    page.getByText(/Journal d.audit indisponible/i),
-  ).toBeVisible();
+    // --------------------------- 2. Audit redirige vers /subscribe
+    // Sans abonnement actif, l'organisation n'a pas la capacité audit.
+    // La page /audit doit rediriger vers /subscribe?reason=audit avec un
+    // message explicatif, pas un mur blanc.
+    await page.goto("/audit");
+    await page.waitForURL(/\/subscribe/);
+    await expect(
+      page.getByText(/Journal d.audit indisponible/i),
+    ).toBeVisible();
+  });
 });

@@ -167,15 +167,18 @@ test("de l'inscription à l'export comptable du premier carnet", async ({
   expect(voucher?.deposit_ref).toBe("Bordereau nº 4471");
 
   // ------------------------------------------------ 6. Bon de sortie
+  // `DeliveryLines` rend deux jeux d'inputs (mobile empilé + desktop table)
+  // avec le même `aria-label` : seul un est visible selon la largeur. On
+  // filtre sur la visibilité pour satisfaire le mode strict de Playwright.
   await page.goto("/delivery-notes");
   await openCreationPanel(page, "Nouveau bon de sortie");
   await page.getByLabel("Nom de l'émetteur").fill("Awa Diallo");
   await page.getByLabel("Service").fill("Magasin");
-  await page.getByLabel("Désignation, ligne 1").fill("Tôles galvanisées");
-  await page.getByLabel("Quantité, ligne 1").fill("12");
-  await page.getByLabel("Destination, ligne 1").fill("Chantier Koumassi");
-  await page.getByLabel("Désignation, ligne 2").fill("Ciment");
-  await page.getByLabel("Quantité, ligne 2").fill("40 sacs");
+  await page.getByLabel("Désignation, ligne 1").filter({ visible: true }).first().fill("Tôles galvanisées");
+  await page.getByLabel("Quantité, ligne 1").filter({ visible: true }).first().fill("12");
+  await page.getByLabel("Destination, ligne 1").filter({ visible: true }).first().fill("Chantier Koumassi");
+  await page.getByLabel("Désignation, ligne 2").filter({ visible: true }).first().fill("Ciment");
+  await page.getByLabel("Quantité, ligne 2").filter({ visible: true }).first().fill("40 sacs");
   // La troisième ligne reste vide : elle ne doit pas s'immiscer en base.
   await page.getByRole("button", { name: "Émettre le bon" }).click();
   await expect(shown(page, "Awa Diallo")).toBeVisible();

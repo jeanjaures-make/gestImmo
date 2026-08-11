@@ -37,7 +37,12 @@ export default async function DashboardLayout({
   // l'écran resterait de toute façon sans intérêt, plus rien ne pouvant
   // être émis. `getActiveSubscription` est mémoïsée pour le rendu, les
   // pages qui la rappellent ne paient pas une seconde requête.
+  //
+  // `=== false` (et non `!`) pour compatibilité ascendante : si la colonne
+  // `has_audit_log` n'existe pas encore en base, la RPC renvoie `undefined`,
+  // et l'ancien comportement (lien visible) est préservé.
   const subscription = await getActiveSubscription(organization.id);
+  const hasAuditLog = subscription?.has_audit_log !== false;
 
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
@@ -46,7 +51,7 @@ export default async function DashboardLayout({
           organizationName={organization.name}
           logoUrl={organization.logo_url}
           role={profile.role}
-          hasAuditLog={subscription?.has_audit_log ?? false}
+          hasAuditLog={hasAuditLog}
         />
       </div>
 
