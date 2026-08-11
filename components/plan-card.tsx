@@ -76,12 +76,15 @@ export function PlanCard({
     features.push("Utilisateurs illimités");
   }
 
-  // Business et Illimité : rôles et audit
-  if (plan.slug === "business" || plan.slug === "unlimited") {
+  // Business et Illimité : rôles et audit. La capacité audit vient de la
+  // base (colonne has_audit_log), pas d'un slug codé en dur.
+  if (plan.has_audit_log) {
     features.push("Rôles et permissions", "Journal d'audit complet");
   }
 
-  // Illimité : accompagnement
+  // Illimité : accompagnement. Le slug reste la seule façon de distinguer
+  // cette offre spécifique — c'est un positionnement marketing, pas une
+  // capacité fonctionnelle.
   if (plan.slug === "unlimited") {
     features.push("Accompagnement à la reprise de données");
   }
