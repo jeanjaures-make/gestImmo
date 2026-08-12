@@ -11,7 +11,8 @@
     "test:e2e": "playwright test",
     "test": "vitest run",
     "test:watch": "vitest",
-    "check:boundaries": "node scripts/check-boundaries.mjs"
+    "check:boundaries": "node scripts/check-boundaries.mjs",
+    "check:db": "node scripts/check-db.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
