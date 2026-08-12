@@ -566,9 +566,13 @@ RETURNS TABLE (
   href     TEXT
 )
 LANGUAGE SQL STABLE SET search_path = public AS $$
+  -- Le lien mène à LA pièce, pas à sa liste. Renvoyer '/receipts' obligeait
+  -- l'utilisateur à retrouver à la main, dans plusieurs centaines de
+  -- lignes, celle qu'il venait précisément de désigner : la recherche
+  -- s'arrêtait un geste trop tôt.
   WITH needle AS (SELECT '%' || btrim(q) || '%' AS pattern)
   SELECT * FROM (
-    SELECT 'receipt', r.id, r.number, r.payer, '/receipts'
+    SELECT 'receipt', r.id, r.number, r.payer, '/receipts/' || r.id
     FROM receipts r, needle n
     WHERE btrim(q) <> ''
       AND (r.number ILIKE n.pattern
@@ -576,7 +580,8 @@ LANGUAGE SQL STABLE SET search_path = public AS $$
            OR r.articles ILIKE n.pattern)
 
     UNION ALL
-    SELECT 'cash_voucher', c.id, c.number, c.counterparty, '/cash-vouchers'
+    SELECT 'cash_voucher', c.id, c.number, c.counterparty,
+           '/cash-vouchers/' || c.id
     FROM cash_vouchers c, needle n
     WHERE btrim(q) <> ''
       AND (c.number ILIKE n.pattern
@@ -584,7 +589,8 @@ LANGUAGE SQL STABLE SET search_path = public AS $$
            OR c.reason ILIKE n.pattern)
 
     UNION ALL
-    SELECT 'delivery_note', d.id, d.number, d.issuer, '/delivery-notes'
+    SELECT 'delivery_note', d.id, d.number, d.issuer,
+           '/delivery-notes/' || d.id
     FROM delivery_notes d, needle n
     WHERE btrim(q) <> ''
       AND (d.number ILIKE n.pattern

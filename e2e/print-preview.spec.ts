@@ -20,11 +20,6 @@ import { test, expect } from "@playwright/test";
  * s'exécute contre un build de production.
  */
 test.describe("Banc de rendu des pièces imprimées", () => {
-  test.skip(
-    !!process.env.CI,
-    "La route de prévisualisation n'existe qu'en développement.",
-  );
-
   const SHEETS = [
     { id: "receipt", label: "Reçu" },
     { id: "cash-voucher", label: "Bon de caisse" },
@@ -34,6 +29,19 @@ test.describe("Banc de rendu des pièces imprimées", () => {
   for (const { id, label } of SHEETS) {
     test(`capture — ${label}`, async ({ page }) => {
       await page.goto("/print-preview");
+
+      // Le banc n'existe qu'en développement, et n'est de toute façon pas
+      // public : sur un build de production la route se dérobe, et le proxy
+      // renvoie vers la connexion — un 307, pas un 404, ce qui trompait la
+      // première version de cette garde. On vérifie donc où l'on a atterri.
+      //
+      // La condition est déduite du serveur plutôt que de la variable CI :
+      // la suite complète lance elle aussi un build de production en local,
+      // et ces captures y échouaient sans rien signaler de réel.
+      test.skip(
+        !page.url().includes("/print-preview"),
+        "Banc absent de ce serveur. Lancer `npm run dev`, puis relancer ce fichier seul.",
+      );
 
       const sheet = page.locator(`[data-sheet="${id}"]`);
       await expect(sheet).toBeVisible();
