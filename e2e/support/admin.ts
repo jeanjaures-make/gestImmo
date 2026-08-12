@@ -130,7 +130,7 @@ export async function deleteUsersMatching(prefix: string) {
  * avec `has_audit_log: true`.
  *
  * L'abonnement est inséré avec la clé service_role : c'est le chemin que
- * suit le webhook CinetPay après vérification, jamais un parcours client.
+ * suit le webhook du fournisseur après vérification, jamais un parcours client.
  */
 export async function seedSubscription(orgId: string, planSlug = "business") {
   const { data: plan, error: planErr } = await admin()

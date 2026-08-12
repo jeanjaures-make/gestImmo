@@ -430,7 +430,7 @@ try {
    *     jamais modifiable par un client, sinon on s'abonne à 1 franc ;
    *   — nul ne fait passer son propre paiement à « payé » : cette
    *     transition n'appartient qu'au webhook, après vérification chez
-   *     CinetPay, via la clé service_role ;
+   *     le fournisseur de paiement, via la clé service_role ;
    *   — une organisation ne voit ni les abonnements ni les paiements
    *     d'une autre.
    */
@@ -551,7 +551,7 @@ try {
       }
 
       // Le journal des notifications contient les réponses brutes de
-      // CinetPay : il reste hors de portée de tout client.
+      // du fournisseur : il reste hors de portée de tout client.
       await admin.from("payment_events").insert({
         transaction_id: tx, event_type: "verification", payload: { probe: true },
       });

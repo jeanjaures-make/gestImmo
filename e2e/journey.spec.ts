@@ -96,7 +96,7 @@ test("de l'inscription à l'export comptable du premier carnet", async ({
 
   // Abonnement Business : sans abonnement actif, `checkDocumentQuota`
   // bloque l'émission de pièces. On l'active ici via l'API admin — c'est
-  // le chemin que suit le webhook CinetPay après vérification, pas un
+  // le chemin que suit le webhook Moneroo après vérification, pas un
   // parcours client. Le test éprouve l'émission, pas le paiement.
   await seedSubscription(org!.id, "business");
 

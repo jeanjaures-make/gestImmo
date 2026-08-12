@@ -19,8 +19,9 @@ const PUBLIC_PATHS = [
   "/auth",
   "/setup",
   "/legal",
-  // Le webhook CinetPay n'a pas de session Supabase : il est public.
-  // La sécurité repose sur la vérification serveur auprès de CinetPay.
+  // Le webhook du fournisseur de paiement n'a pas de session Supabase :
+  // il est donc public. Sa sécurité tient à la signature HMAC de la
+  // notification, puis à une re-vérification serveur de la transaction.
   "/api/webhooks",
   // Le planificateur de Vercel non plus. La route se garde elle-même
   // par `CRON_SECRET` et reste inerte si le secret n'est pas configuré.

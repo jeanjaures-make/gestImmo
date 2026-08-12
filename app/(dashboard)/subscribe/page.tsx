@@ -37,7 +37,7 @@ export default async function SubscribePage({
     <>
       <PageHeader
         title="Choisissez votre plan"
-        description="Souscrivez en ligne via CinetPay. Paiement de test en Sandbox — aucune somme réelle n'est débitée."
+        description="Souscrivez en ligne. Le paiement est traité par Moneroo : mobile money ou carte, selon ce que propose votre pays."
       />
 
       {reason === "audit" && (
@@ -74,8 +74,9 @@ export default async function SubscribePage({
       </div>
 
       <p className="mt-8 text-center text-xs text-muted-foreground">
-        Paiements sécurisés par CinetPay. Environnement de test — aucune
-        transaction réelle. Les clés CinetPay restent côté serveur.
+        Paiements traités par Moneroo. CaisseOps ne voit ni ne conserve
+        aucune donnée bancaire : la page de paiement est hébergée par le
+        fournisseur, et les clés restent côté serveur.
       </p>
     </>
   );

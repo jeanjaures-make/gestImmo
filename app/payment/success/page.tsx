@@ -6,11 +6,12 @@ import { Button, Card, CardContent } from "@/components/ui/kit";
 export const metadata = { title: "Paiement reçu — CaisseOps" };
 
 /**
- * Page de retour après paiement CinetPay.
+ * Page de retour après paiement.
  *
- * IMPORTANT : on n'affiche jamais « Paiement réussi » ici. Le retour de
- * CinetPay ne prouve rien — la confirmation vient du webhook, après
- * vérification serveur auprès de CinetPay.
+ * IMPORTANT : on n'affiche jamais « Paiement réussi » ici. Le navigateur
+ * qui revient ne prouve rien : cette adresse peut être ouverte à la main.
+ * La confirmation vient du webhook, après re-vérification de la
+ * transaction auprès du fournisseur.
  *
  * L'utilisateur voit « Paiement reçu, vérification en cours ». Son
  * abonnement s'activera automatiquement quand le webhook aura traité.
@@ -29,9 +30,9 @@ export default function PaymentSuccessPage() {
           </h1>
 
           <p className="text-sm text-muted-foreground">
-            Nous vérifions votre paiement auprès de CinetPay. Votre
-            abonnement sera activé automatiquement une fois la
-            vérification terminée — généralement en moins d&apos;une minute.
+            Nous vérifions votre paiement. Votre abonnement sera activé
+            automatiquement une fois la vérification terminée —
+            généralement en moins d&apos;une minute.
           </p>
 
           <p className="text-xs text-muted-foreground">

@@ -32,7 +32,7 @@ export function PlanCard({
     setLoading(true);
     startTransition(async () => {
       try {
-        const response = await fetch("/api/payments/cinetpay/create", {
+        const response = await fetch("/api/payments/moneroo/create", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ plan_id: plan.id }),
@@ -46,9 +46,10 @@ export function PlanCard({
           return;
         }
 
-        // Redirection vers CinetPay Sandbox
-        if (data.payment_url) {
-          window.location.href = data.payment_url;
+        // Le fournisseur héberge la page de paiement : on y envoie le
+        // navigateur. Aucune donnée bancaire ne transite par CaisseOps.
+        if (data.checkout_url) {
+          window.location.href = data.checkout_url;
         } else {
           toast.error("URL de paiement manquante.");
           setLoading(false);

@@ -1,5 +1,5 @@
 -- =====================================================================
--- CaisseOps — Abonnements, plans et paiements CinetPay (Sandbox)
+-- CaisseOps — Abonnements, plans et paiements
 --
 -- À exécuter dans l'éditeur SQL de Supabase, après `schema.sql`.
 --
@@ -134,7 +134,7 @@ CREATE POLICY subscriptions_insert ON subscriptions
 -- applicative. Le webhook contourne le RLS via createAdminClient().
 
 -- =====================================================================
--- PAYMENTS — une transaction CinetPay, du pending au paid.
+-- PAYMENTS — une transaction chez le fournisseur, du pending au paid.
 -- =====================================================================
 CREATE TABLE IF NOT EXISTS payments (
   id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -142,11 +142,14 @@ CREATE TABLE IF NOT EXISTS payments (
   user_id         UUID REFERENCES profiles(id) ON DELETE SET NULL,
   subscription_id UUID REFERENCES subscriptions(id) ON DELETE CASCADE,
   plan_id         UUID NOT NULL REFERENCES plans(id),
-  -- L'identifiant unique côté CinetPay : notre clé d'idempotence.
+  -- L'identifiant de la transaction CHEZ LE FOURNISSEUR, et notre clé
+  -- d'idempotence. Il porte d'abord notre référence interne — la colonne
+  -- est NOT NULL et l'identifiant du fournisseur n'existe qu'après
+  -- l'appel — puis celui-ci le remplace.
   transaction_id  TEXT NOT NULL UNIQUE,
   amount          NUMERIC(14, 2) NOT NULL CHECK (amount >= 0),
   currency        TEXT NOT NULL DEFAULT 'XOF',
-  provider        TEXT NOT NULL DEFAULT 'cinetpay',
+  provider        TEXT NOT NULL DEFAULT 'moneroo',
   payment_method  TEXT,
   status          payment_status NOT NULL DEFAULT 'pending',
   paid_at         TIMESTAMPTZ,
@@ -178,7 +181,7 @@ CREATE POLICY payments_insert ON payments
 -- L'UPDATE est réservé au client admin (webhook).
 
 -- =====================================================================
--- PAYMENT_EVENTS — journal brut des notifications CinetPay.
+-- PAYMENT_EVENTS — journal brut des notifications du fournisseur.
 --
 -- Idempotence : si le même payload arrive deux fois, on l'enregistre
 -- mais on ne rejoue pas l'activation. La présence de l'événement est
@@ -336,7 +339,7 @@ CREATE TRIGGER payments_touch BEFORE UPDATE ON payments
 -- clic sur « Commencer » suivi d'une fermeture d'onglet laisse un
 -- abonnement `pending` et un paiement `pending` que rien ne viendra
 -- jamais confirmer : au bout de 24 heures, la fenêtre de paiement de
--- CinetPay est close, la tentative est perdue pour de bon.
+-- paiement du fournisseur est close, la tentative est perdue pour de bon.
 --
 -- SECURITY DEFINER, sans droit d'exécution pour `authenticated` : seule
 -- la clé de service peut l'appeler.
@@ -379,3 +382,141 @@ END;
 $$;
 
 REVOKE EXECUTE ON FUNCTION sweep_subscriptions() FROM anon, authenticated;
+
+-- =====================================================================
+-- CONFIRMATION D'UN PAIEMENT — le seul chemin qui active un abonnement.
+--
+-- ─── Pourquoi en SQL et non dans la route ──────────────────────────────
+-- L'ancienne version enchaînait, côté Node : lire le paiement, vérifier
+-- qu'il n'était pas déjà réglé, l'écrire, chercher l'abonnement en cours,
+-- calculer la date, écrire. Six allers-retours, aucune transaction. Deux
+-- notifications arrivant ensemble — ce que Moneroo fait, puisqu'il rejoue
+-- jusqu'à trois fois — franchissaient toutes deux le contrôle avant que
+-- l'une ait écrit : deux activations, soixante jours vendus pour trente.
+--
+-- Ici, `FOR UPDATE` verrouille la ligne de paiement le temps de la
+-- transaction. La deuxième notification attend, relit `status = 'paid'`
+-- et repart sans rien faire. L'idempotence n'est plus une intention mais
+-- une propriété de la base.
+--
+-- ─── Ce que la fonction corrige aussi ──────────────────────────────────
+-- Un renouvellement laissait DEUX abonnements actifs : le nouveau portait
+-- la date prolongée, l'ancien restait « actif » avec la sienne. Rien ne
+-- le voyait, parce que la lecture prend le plus récent — mais l'export,
+-- le décompte et l'inspection de la table, eux, voyaient double.
+-- L'ancien est désormais clos explicitement.
+--
+-- ─── Report des jours restants ─────────────────────────────────────────
+-- On repart de la plus lointaine des deux dates : maintenant, ou
+-- l'échéance en cours. Payer le 15 quand on est couvert jusqu'au 20
+-- reporte donc au 20 du mois suivant, jamais au 15 : les jours déjà
+-- réglés ne se perdent pas.
+-- =====================================================================
+CREATE OR REPLACE FUNCTION confirm_payment(
+  p_transaction_id TEXT,
+  p_method         TEXT DEFAULT NULL
+)
+RETURNS TABLE (
+  outcome         TEXT,
+  subscription_id UUID,
+  expires_at      TIMESTAMPTZ
+)
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_payment  RECORD;
+  v_duration INT;
+  v_base     TIMESTAMPTZ;
+  v_expires  TIMESTAMPTZ;
+  v_sub      UUID;
+BEGIN
+  SELECT p.* INTO v_payment
+  FROM payments p
+  WHERE p.transaction_id = p_transaction_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RETURN QUERY SELECT 'unknown'::TEXT, NULL::UUID, NULL::TIMESTAMPTZ;
+    RETURN;
+  END IF;
+
+  -- Déjà traité : on ressort la période en place, sans la prolonger.
+  IF v_payment.status = 'paid' THEN
+    SELECT s.id, s.expires_at INTO v_sub, v_expires
+    FROM subscriptions s WHERE s.id = v_payment.subscription_id;
+    RETURN QUERY SELECT 'already_paid'::TEXT, v_sub, v_expires;
+    RETURN;
+  END IF;
+
+  SELECT pl.duration_days INTO v_duration
+  FROM plans pl WHERE pl.id = v_payment.plan_id;
+  v_duration := COALESCE(v_duration, 30);
+
+  -- La plus lointaine échéance encore valable de l'organisation.
+  SELECT MAX(s.expires_at) INTO v_base
+  FROM subscriptions s
+  WHERE s.organization_id = v_payment.organization_id
+    AND s.status = 'active'
+    AND s.expires_at > NOW();
+
+  v_base := GREATEST(COALESCE(v_base, NOW()), NOW());
+  v_expires := v_base + (v_duration || ' days')::INTERVAL;
+
+  UPDATE payments
+     SET status = 'paid',
+         paid_at = NOW(),
+         payment_method = COALESCE(p_method, payment_method)
+   WHERE id = v_payment.id;
+
+  -- Clore l'abonnement précédent : sa durée a été reportée sur le
+  -- nouveau, le laisser « actif » ferait compter deux fois.
+  UPDATE subscriptions
+     SET status = 'cancelled', cancelled_at = NOW()
+   WHERE organization_id = v_payment.organization_id
+     AND status = 'active'
+     AND id IS DISTINCT FROM v_payment.subscription_id;
+
+  UPDATE subscriptions
+     SET status = 'active',
+         started_at = NOW(),
+         expires_at = v_expires
+   WHERE id = v_payment.subscription_id
+  RETURNING id INTO v_sub;
+
+  RETURN QUERY SELECT 'activated'::TEXT, v_sub, v_expires;
+END;
+$$;
+
+-- Seule la clé de service appelle cette fonction, depuis le webhook.
+REVOKE EXECUTE ON FUNCTION confirm_payment(TEXT, TEXT) FROM anon, authenticated;
+
+-- =====================================================================
+-- ÉCHEC D'UN PAIEMENT — refus, annulation, montant divergent.
+--
+-- L'abonnement en attente est clos en même temps : sans cela il traînait
+-- jusqu'au balayage quotidien, et l'écran d'abonnement montrait pendant
+-- des heures une souscription qui n'aboutirait jamais.
+-- =====================================================================
+CREATE OR REPLACE FUNCTION fail_payment(
+  p_transaction_id TEXT,
+  p_status         payment_status DEFAULT 'failed'
+)
+RETURNS VOID
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_sub UUID;
+BEGIN
+  UPDATE payments
+     SET status = p_status
+   WHERE transaction_id = p_transaction_id
+     AND status = 'pending'
+  RETURNING subscription_id INTO v_sub;
+
+  IF v_sub IS NOT NULL THEN
+    UPDATE subscriptions
+       SET status = 'cancelled', cancelled_at = NOW()
+     WHERE id = v_sub AND status = 'pending';
+  END IF;
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION fail_payment(TEXT, payment_status) FROM anon, authenticated;

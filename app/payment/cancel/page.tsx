@@ -6,7 +6,7 @@ import { Button, Card, CardContent } from "@/components/ui/kit";
 export const metadata = { title: "Paiement annulé — CaisseOps" };
 
 /**
- * Page d'annulation — l'utilisateur a fermé la fenêtre CinetPay
+ * Page d'annulation — l'utilisateur a fermé la fenêtre de paiement
  * ou le paiement a été refusé.
  */
 export default function PaymentCancelPage() {

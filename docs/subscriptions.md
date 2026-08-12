@@ -20,7 +20,7 @@ pending  →  active  →  expired
    └── (paiement échoué : reste pending, puis nettoyé)
 ```
 
-1. **pending** : l'utilisateur a cliqué « Commencer », un paiement CinetPay est en cours.
+1. **pending** : l'utilisateur a cliqué « Commencer », un paiement est en cours chez le fournisseur.
 2. **active** : le webhook a confirmé le paiement, `started_at` et `expires_at` sont renseignés.
 3. **expired** : `expires_at < now()`. L'utilisateur peut encore se connecter, mais la création de pièces est bloquée.
 4. **cancelled** : annulation manuelle (futur).
@@ -32,7 +32,7 @@ La règle : **les jours restants ne sont jamais perdus**.
 - Si l'abonnement expire le 20 septembre et que le client renouvelle le 15 septembre → nouvelle expiration = 20 octobre.
 - Si l'abonnement est déjà expiré → nouvelle expiration = maintenant + 30 jours.
 
-Cette logique est implémentée dans le webhook (`app/api/webhooks/cinetpay/route.ts`).
+Cette logique est implémentée dans le webhook (`app/api/webhooks/moneroo/route.ts` et la fonction SQL `confirm_payment`).
 
 ## Quotas
 
