@@ -51,7 +51,7 @@ test("plans affichés depuis la base, audit redirige vers subscribe", async ({
       name: orgName,
       slug: `sub-${Date.now()}`,
       legal_form: "S.A.R.L.",
-      address: "Zone industrielle de Vridi, Abidjan",
+      address: "Zone industrielle, lot 12",
       phone: "+225 27 21 00 00 00",
     })
     .select("id")

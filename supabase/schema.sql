@@ -67,9 +67,9 @@ CREATE TABLE IF NOT EXISTS organizations (
 ALTER TABLE organizations
   -- « S.A.R.L. », « S.A. », « Entreprise individuelle »… imprimé à côté du nom.
   ADD COLUMN IF NOT EXISTS legal_form  TEXT,
-  -- Sous-titre de la raison sociale : « Société de travaux industriels… ».
+  -- Sous-titre : ce que fait l'entreprise, sur la ligne sous son nom.
   ADD COLUMN IF NOT EXISTS trade_name  TEXT,
-  -- Accroche commerciale : « Votre domaine, notre expertise. »
+  -- Devise ou signature commerciale, si l'entreprise en a une.
   ADD COLUMN IF NOT EXISTS tagline     TEXT,
   -- Domaines d'activité, un par puce dans l'en-tête.
   ADD COLUMN IF NOT EXISTS activities  TEXT[] NOT NULL DEFAULT '{}',

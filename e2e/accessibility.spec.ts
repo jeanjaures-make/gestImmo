@@ -96,10 +96,10 @@ test.beforeAll(async ({ browser }) => {
     name: orgName,
     slug: `a11y-${Date.now()}`,
     legal_form: "S.A.R.L.",
-    trade_name: "Société de travaux industriels et de prestation",
-    activities: ["Chaudronnerie", "Tuyauterie"],
-    address: "Zone industrielle de Vridi, Abidjan",
-    phone: "+225 27 21 00 00 00",
+    trade_name: "Société de démonstration et de prestations diverses",
+    activities: ["Première activité", "Deuxième activité"],
+    address: "Zone industrielle, lot 12 — voie principale",
+    phone: "+225 00 00 00 00 00",
   });
 
   await seed("profiles", {

@@ -43,6 +43,7 @@ export function DottedField({
   label,
   value,
   suffix,
+  wrap,
   className,
   labelClassName,
 }: {
@@ -50,6 +51,16 @@ export function DottedField({
   value?: ReactNode;
   /** Mention collée après le trait : « f cfa ». */
   suffix?: ReactNode;
+  /**
+   * Laisse la valeur passer à la ligne au lieu de la couper.
+   *
+   * Par défaut le texte est tronqué : sur une ligne unique — un motif, une
+   * référence de dépôt — c'est le comportement voulu, la pièce garde sa
+   * hauteur. Mais là où le carnet réserve deux ou trois lignes, tronquer
+   * amputerait la mention : un montant en lettres coupé par des points de
+   * suspension ne vaut rien devant un comptable.
+   */
+  wrap?: boolean;
   className?: string;
   labelClassName?: string;
 }) {
@@ -60,28 +71,67 @@ export function DottedField({
           {label}
         </span>
       )}
-      <span className="dotted truncate">{value}</span>
+      <span className={cn("dotted", wrap ? "min-h-[1.2em]" : "truncate")}>
+        {value}
+      </span>
       {suffix && <span className="shrink-0 font-bold">{suffix}</span>}
     </div>
   );
 }
 
-/** Case à cocher imprimée. Cochée, elle porte une croix bien visible. */
+/**
+ * Ligne de pointillés seule, sans intitulé.
+ *
+ * Le carnet réserve deux ou trois lignes aux mentions longues — un nom
+ * composé, une somme à sept chiffres en toutes lettres. Le texte y court
+ * naturellement ; ces lignes de renfort reproduisent la place disponible.
+ */
+export function DottedLine({ className }: { className?: string }) {
+  return (
+    <div className={cn("flex", className)}>
+      <span className="dotted min-h-[1.2em]" />
+    </div>
+  );
+}
+
+/**
+ * Case à cocher imprimée. Cochée, elle porte une croix bien visible.
+ *
+ * `labelFirst` place l'intitulé avant la case. Le carnet fait les deux :
+ * « Entrée ☐ » en tête de bon, « ☐ CASH » dans le pied. L'ordre n'est pas
+ * un détail de goût — c'est ce que l'œil suit en dépouillant une pile.
+ */
 export function CheckBox({
   checked,
   label,
+  labelFirst,
   className,
 }: {
   checked: boolean;
   label?: ReactNode;
+  labelFirst?: boolean;
   className?: string;
 }) {
+  const box = (
+    <span className="inline-flex size-[14px] shrink-0 items-center justify-center border-[1.5px] border-black text-[11px] leading-none font-black">
+      {checked ? "X" : ""}
+    </span>
+  );
+  const text = label && <span className="font-bold">{label}</span>;
+
   return (
     <span className={cn("inline-flex items-center gap-1.5", className)}>
-      <span className="inline-flex size-[14px] shrink-0 items-center justify-center border-[1.5px] border-black text-[11px] leading-none font-black">
-        {checked ? "X" : ""}
-      </span>
-      {label && <span className="font-bold">{label}</span>}
+      {labelFirst ? (
+        <>
+          {text}
+          {box}
+        </>
+      ) : (
+        <>
+          {box}
+          {text}
+        </>
+      )}
     </span>
   );
 }
@@ -116,19 +166,29 @@ export function PrintedDate({
   );
 }
 
-/** Cadre de montant : le libellé de devise, puis la somme encadrée. */
+/**
+ * Cadre de montant : le libellé de devise, puis la somme encadrée.
+ *
+ * Le libellé est facultatif. Le bon de caisse porte bien sa cellule
+ * « F. cfa » ; le reçu, lui, fait précéder le cadre d'un « BPF » posé à
+ * l'extérieur — l'encadrer à nouveau doublerait la mention.
+ */
 export function AmountBox({
   currencyLabel,
+  className,
   children,
 }: {
-  currencyLabel: string;
+  currencyLabel?: string;
+  className?: string;
   children: ReactNode;
 }) {
   return (
-    <div className="flex items-stretch border-[1.5px] border-black">
-      <span className="border-r-[1.5px] border-black px-2 py-1 text-base font-bold whitespace-nowrap">
-        {currencyLabel}
-      </span>
+    <div className={cn("flex items-stretch border-[1.5px] border-black", className)}>
+      {currencyLabel && (
+        <span className="border-r-[1.5px] border-black px-2 py-1 text-base font-bold whitespace-nowrap">
+          {currencyLabel}
+        </span>
+      )}
       <span className="min-w-[150px] px-2 py-1 text-right text-base font-bold tabular-nums">
         {children}
       </span>

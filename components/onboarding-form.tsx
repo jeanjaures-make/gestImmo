@@ -177,7 +177,7 @@ export function OnboardingForm() {
         <Field label="Nom de l'organisation">
           <Input
             name="name"
-            placeholder="Sotrapi"
+            placeholder="Nom de votre entreprise"
             autoComplete="organization"
             required
             autoFocus
@@ -238,7 +238,7 @@ export function OnboardingForm() {
         <Field label="Adresse">
           <Input
             name="address"
-            placeholder="Zone industrielle de Vridi, Abidjan"
+            placeholder="Quartier, rue, repère"
             autoComplete="street-address"
             className="h-11"
           />

@@ -17,12 +17,20 @@ import type { Organization } from "@/lib/types";
  * simple, chargée avec le document, est ici la bonne réponse.
  */
 
-/** Deux variantes, correspondant aux deux gabarits de carnet. */
+/** Trois variantes, correspondant aux trois gabarits de carnet. */
 type Variant =
   /** En-tête large : logo, accroche et activités, puis bandeau de contact. */
   | "full"
-  /** En-tête compact : logo et coordonnées empilées à gauche. */
-  | "compact";
+  /** En-tête compact : logo puis coordonnées centrées dessous. */
+  | "compact"
+  /**
+   * Identité seule : logo et raison sociale, sans coordonnées.
+   *
+   * C'est le gabarit du bon de sortie. La pièce ne quitte pas l'entreprise
+   * — elle accompagne une marchandise d'un magasin à un chantier — donc
+   * rien n'y justifie de répéter un téléphone ou une adresse e-mail.
+   */
+  | "identity";
 
 export function Letterhead({
   organization,
@@ -74,11 +82,17 @@ export function Letterhead({
     </div>
   );
 
+  if (variant === "identity") {
+    return <div className="leading-tight">{identity}</div>;
+  }
+
   if (variant === "compact") {
     return (
       <div className="leading-tight">
         {identity}
-        <div className="mt-1 text-[9px] font-semibold">
+        {/* Coordonnées centrées sous le bloc d'identité, et non alignées à
+            gauche : c'est ainsi qu'elles sont composées sur la souche. */}
+        <div className="mt-1 text-center text-[9px] font-semibold">
           {phones.length > 0 && <p>Cel : {phones.join(" / ")}</p>}
           {emails.length > 0 && <p>E-mail : {emails.join(" / ")}</p>}
         </div>
@@ -119,12 +133,12 @@ export function Letterhead({
               <p>
                 {address}
                 {address && phones.length > 0 && " - "}
-                {phones.length > 0 && `Cel: ${phones.join(" / ")}`}
+                {phones.length > 0 && `Cel : ${phones.join(" / ")}`}
               </p>
             )}
             {(emails.length > 0 || website) && (
               <p>
-                {emails.length > 0 && `E-mail: ${emails.join(" / ")}`}
+                {emails.length > 0 && `E-mail : ${emails.join(" / ")}`}
                 {emails.length > 0 && website && " / "}
                 {website}
               </p>

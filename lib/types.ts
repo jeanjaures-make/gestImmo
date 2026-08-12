@@ -70,9 +70,9 @@ export type Organization = {
   logo_url: string | null;
   /** « S.A.R.L. », « S.A. »… accolé au nom. */
   legal_form: string | null;
-  /** Sous-titre : « Société de travaux industriels et de prestation ». */
+  /** Sous-titre : ce que fait l'entreprise, sous son nom. */
   trade_name: string | null;
-  /** Accroche : « Votre domaine, notre expertise. » */
+  /** Devise ou signature commerciale, si elle en a une. */
   tagline: string | null;
   /** Domaines d'activité, un par puce. */
   activities: string[];

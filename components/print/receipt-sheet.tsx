@@ -2,6 +2,7 @@ import { Letterhead } from "@/components/letterhead";
 import {
   AmountBox,
   DottedField,
+  DottedLine,
   Sheet,
 } from "@/components/print/sheet";
 import { formatAmount } from "@/lib/money";
@@ -40,12 +41,14 @@ export function ReceiptSheet({
       </div>
 
       <div className="mt-3 flex items-center justify-between gap-6">
-        <span className="text-2xl font-bold tracking-wide">REÇU</span>
+        {/* « REÇU » ne touche pas la marge : il est décalé vers le centre,
+            en regard du cadre BPF. C'est la disposition de la souche, et
+            elle laisse le coin supérieur gauche à l'en-tête. */}
+        <span className="ml-[36%] text-3xl font-bold tracking-wide">REÇU</span>
         <div className="flex items-center gap-2">
           <span className="text-lg font-bold">BPF</span>
-          <AmountBox currencyLabel="F CFA">
-            {formatAmount(receipt.amount)}
-          </AmountBox>
+          {/* Pas de cellule de devise : « BPF » la porte déjà. */}
+          <AmountBox>{formatAmount(receipt.amount)}</AmountBox>
         </div>
       </div>
 
@@ -56,28 +59,35 @@ export function ReceiptSheet({
           labelClassName="text-base"
         />
 
-        {/* Le montant en lettres occupe deux lignes sur le carnet : une
+        {/* Le montant en lettres occupe trois lignes sur le carnet : une
             somme à sept chiffres ne tient pas sur une seule. */}
-        <div className="flex items-baseline gap-1.5">
-          <span className="shrink-0 text-base font-bold">la somme de</span>
-          <span className="dotted min-h-[1.2em] text-[13px] font-semibold">
-            {receipt.amount_in_words}
-          </span>
+        <div className="flex flex-col gap-2">
+          <div className="flex items-baseline gap-1.5">
+            <span className="shrink-0 text-base font-bold">la somme de</span>
+            <span className="dotted min-h-[1.2em] text-[13px] font-semibold">
+              {receipt.amount_in_words}
+            </span>
+          </div>
+          <DottedLine />
+          <DottedLine />
         </div>
 
-        <DottedField label="Article(s) :" value={receipt.articles} />
+        <div className="flex flex-col gap-2">
+          <DottedField label="Article(s) :" value={receipt.articles} wrap />
+          <DottedLine className="max-w-[28%]" />
+        </div>
 
+        {/* Ni « f cfa » ni « F CFA » après les montants : le cadre BPF fixe
+            déjà la devise en tête de pièce, et la souche ne la répète pas. */}
         <div className="flex gap-6">
           <DottedField
             label="Avance :"
             value={receipt.advance ? formatAmount(receipt.advance) : ""}
-            suffix="F CFA"
             className="flex-1"
           />
           <DottedField
             label="Reste :"
             value={receipt.balance ? formatAmount(receipt.balance) : ""}
-            suffix="F CFA"
             className="flex-1"
           />
         </div>

@@ -103,7 +103,7 @@ export default async function SettingsPage() {
                 <Input
                   name="name"
                   defaultValue={organization.name}
-                  placeholder="SOTIP-CI"
+                  placeholder="Nom de votre entreprise"
                   required
                   maxLength={120}
                 />
@@ -123,7 +123,7 @@ export default async function SettingsPage() {
                 <Input
                   name="trade_name"
                   defaultValue={organization.trade_name ?? ""}
-                  placeholder="Société de travaux industriels et de prestation"
+                  placeholder="Ce que fait votre entreprise, en une ligne"
                   maxLength={160}
                 />
               </Field>
@@ -131,7 +131,7 @@ export default async function SettingsPage() {
                 <Input
                   name="tagline"
                   defaultValue={organization.tagline ?? ""}
-                  placeholder="Votre domaine, notre expertise."
+                  placeholder="Votre devise, si vous en avez une"
                   maxLength={160}
                 />
               </Field>
@@ -146,7 +146,7 @@ export default async function SettingsPage() {
                     rows={4}
                     defaultValue={organization.activities.join("\n")}
                     placeholder={
-                      "Structures métalliques et mixtes, calorifugeage\nChaudronnerie, soudure industrielle, tuyauterie\nSablage et peinture, maintenance industrielle"
+                      "Première activité\nDeuxième activité\nTroisième activité"
                     }
                   />
                 </Field>
@@ -157,7 +157,7 @@ export default async function SettingsPage() {
                   <Input
                     name="address"
                     defaultValue={organization.address ?? ""}
-                    placeholder="Marcory Anoumabo au palmier, rue Bamba Kassoum"
+                    placeholder="Quartier, rue, repère"
                     maxLength={240}
                   />
                 </Field>
@@ -167,7 +167,7 @@ export default async function SettingsPage() {
                 <Input
                   name="phone"
                   defaultValue={organization.phone ?? ""}
-                  placeholder="(+225) 07 48 26 95 74"
+                  placeholder="(+225) 00 00 00 00 00"
                   maxLength={60}
                 />
               </Field>
@@ -175,7 +175,7 @@ export default async function SettingsPage() {
                 <Input
                   name="phone_alt"
                   defaultValue={organization.phone_alt ?? ""}
-                  placeholder="(+225) 07 48 09 80 09"
+                  placeholder="(+225) 00 00 00 00 00"
                   maxLength={60}
                 />
               </Field>

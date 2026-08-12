@@ -77,7 +77,7 @@ test("de l'inscription à l'export comptable du premier carnet", async ({
   await page.getByLabel("Nom", { exact: true }).fill("Diallo");
   await page.getByLabel("Forme juridique").fill("S.A.R.L.");
   await page.getByLabel("Téléphone").fill("+225 27 21 00 00 00");
-  await page.getByLabel("Adresse", { exact: true }).fill("Zone industrielle de Vridi");
+  await page.getByLabel("Adresse", { exact: true }).fill("Zone industrielle, lot 12");
   await page.getByRole("button", { name: "Ouvrir mon espace" }).click();
   await page.waitForURL("**/dashboard");
   await expect(
