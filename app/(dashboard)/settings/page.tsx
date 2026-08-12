@@ -116,9 +116,14 @@ export default async function SettingsPage() {
                   maxLength={40}
                 />
               </Field>
+              {/* L'indice ne reprend pas le libellé du champ voisin : le
+                  nom accessible d'un champ inclut son indice, et « la
+                  ligne sous la raison sociale » rendait deux champs
+                  indiscernables — pour un lecteur d'écran comme pour un
+                  test. On décrit la place, pas le champ d'à côté. */}
               <Field
                 label="Sous-titre"
-                hint="La ligne sous la raison sociale."
+                hint="S'imprime juste sous le nom, en plus petit."
               >
                 <Input
                   name="trade_name"

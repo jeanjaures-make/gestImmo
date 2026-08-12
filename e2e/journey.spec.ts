@@ -273,11 +273,17 @@ test("de l'inscription à l'export comptable du premier carnet", async ({
   // `record_login_event`.
   await expect(shown(page, "Réussie").first()).toBeVisible();
 
-  // Renommer son organisation : plusieurs formulaires portent
-  // « Enregistrer » — profil, puis en-tête ; c'est le dernier.
+  // Renommer son entreprise. On vise le bouton par son libellé entier :
+  // « Enregistrer » seul désignait aussi celui du profil, et `.last()`
+  // dépendait de l'ordre des blocs à l'écran — une fausse piste dès que
+  // cet ordre change, ce qui est arrivé.
   const renamed = `${orgName} SARL`;
-  await page.getByLabel("Nom de l'organisation").fill(renamed);
-  await page.getByRole("button", { name: "Enregistrer" }).last().click();
+  // « Raison sociale » sur cet écran, « Nom de l'organisation » à
+  // l'inscription : deux libellés pour la même colonne, parce qu'on ne
+  // nomme pas une entreprise de la même façon selon qu'on l'inscrit ou
+  // qu'on règle l'en-tête de ses pièces.
+  await page.getByLabel("Raison sociale").fill(renamed);
+  await page.getByRole("button", { name: "Enregistrer l'en-tête" }).click();
 
   // Le nom se vérifie en base : le bandeau latéral qui l'affiche est
   // masqué sur mobile, l'assertion ne tiendrait que sur un seul des deux
