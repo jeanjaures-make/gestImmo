@@ -62,7 +62,7 @@ async function fn(name, args, describe) {
 
 console.log("\nSCHÉMA DE BASE (schema.sql)");
 await columns("organizations", ["id", "name", "legal_form", "trade_name", "activities"]);
-await columns("profiles", ["id", "organization_id", "role", "muted_notifications"]);
+await columns("profiles", ["id", "organization_id", "role"]);
 await columns("receipts", ["id", "number", "payer", "amount"]);
 await columns("cash_vouchers", ["id", "number", "counterparty", "direction"]);
 await columns("delivery_notes", ["id", "number", "issuer"]);
