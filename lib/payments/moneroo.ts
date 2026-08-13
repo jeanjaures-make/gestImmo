@@ -39,11 +39,18 @@ export class MonerooPaymentProvider implements PaymentProvider {
   readonly name = "moneroo";
 
   isConfigured(): boolean {
-    return Boolean(process.env.MONEROO_SECRET_KEY);
+    return Boolean(process.env.MONEROO_SECRET_KEY?.trim());
   }
 
+  /**
+   * `trim()` n'est pas de la coquetterie : une clé collée depuis un
+   * tableau de bord emporte souvent une espace ou un retour de ligne, que
+   * l'interface de Vercel conserve. L'en-tête devient alors
+   * « Bearer sk_xxx\n », et le fournisseur répond « Invalid API Key » —
+   * message qui accuse la clé alors que la clé est bonne.
+   */
   private secretKey(): string {
-    const key = process.env.MONEROO_SECRET_KEY;
+    const key = process.env.MONEROO_SECRET_KEY?.trim();
     if (!key) {
       throw new PaymentProviderError(
         "Moneroo n'est pas configuré : MONEROO_SECRET_KEY est absente.",

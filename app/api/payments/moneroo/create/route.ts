@@ -9,6 +9,7 @@ import {
 } from "@/lib/payments";
 import { callerKey, rateLimit } from "@/lib/rate-limit";
 import { getPlanById } from "@/lib/subscriptions";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -161,16 +162,28 @@ export async function POST(request: NextRequest) {
 
     // L'identifiant du fournisseur devient la clé de la transaction :
     // c'est celui que la notification portera.
-    const { error: linkError } = await supabase
-      .from("payments")
-      .update({ transaction_id: transactionId })
-      .eq("transaction_id", reference);
+    //
+    // ─── Pourquoi le client d'administration, ici ────────────────────
+    // `payments` n'a AUCUNE policy UPDATE : l'écriture est réservée au
+    // serveur. Une mise à jour envoyée avec la session de l'utilisateur
+    // ne touche donc aucune ligne — et, c'est le piège, sans lever la
+    // moindre erreur. Le paiement aurait gardé notre référence interne,
+    // la notification serait arrivée avec l'identifiant Moneroo, aucune
+    // correspondance n'aurait été trouvée, et l'abonnement ne se serait
+    // jamais activé. Silencieusement.
+    const admin = createAdminClient();
+    const { error: linkError, count } = admin
+      ? await admin
+          .from("payments")
+          .update({ transaction_id: transactionId }, { count: "exact" })
+          .eq("transaction_id", reference)
+      : { error: new Error("SUPABASE_SERVICE_ROLE_KEY absente"), count: 0 };
 
-    if (linkError) {
+    if (linkError || !count) {
       // La transaction existe chez Moneroo mais nous ne savons plus la
       // relier. La notification retombera sur `payment_ref`, conservé
       // dans les métadonnées — d'où l'intérêt de l'y avoir mis.
-      reportError(linkError, {
+      reportError(linkError ?? new Error("Aucune ligne de paiement mise à jour"), {
         scope: "moneroo-create-link",
         organizationId,
         userId: session.userId,
@@ -187,14 +200,20 @@ export async function POST(request: NextRequest) {
     // Un paiement qui n'a jamais atteint le fournisseur ne doit pas rester
     // « en attente » : il ne sera jamais confirmé et brouillerait la
     // lecture de l'historique.
-    await supabase
-      .from("payments")
-      .update({ status: "failed" })
-      .eq("transaction_id", reference);
-    await supabase
-      .from("subscriptions")
-      .update({ status: "cancelled", cancelled_at: new Date().toISOString() })
-      .eq("id", subscription.id);
+    //
+    // Même raison qu'au-dessus pour le client d'administration : avec la
+    // session de l'utilisateur, ces deux écritures ne faisaient rien.
+    // C'est ce qui a laissé deux tentatives « en attente » alors que
+    // Moneroo avait refusé la clé.
+    const admin = createAdminClient();
+    if (admin) {
+      // `fail_payment` clôt le paiement ET son abonnement en une seule
+      // transaction : les séparer laissait l'un des deux en arrière.
+      await admin.rpc("fail_payment", {
+        p_transaction_id: reference,
+        p_status: "failed",
+      });
+    }
 
     reportError(error, {
       scope: "moneroo-create",
