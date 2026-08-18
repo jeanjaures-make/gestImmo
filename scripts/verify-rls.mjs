@@ -503,6 +503,46 @@ try {
   }
 
   /**
+   * Un identifiant d'organisation n'est pas un droit de lecture.
+   *
+   * `get_active_subscription`, `count_users` et
+   * `count_documents_this_period` prennent un `organization_id` en
+   * paramètre et sont SECURITY DEFINER : le RLS ne s'y applique pas. Rien
+   * n'obligeait donc l'appelant à demander la SIENNE. Le plan, le tarif,
+   * l'échéance, l'effectif et le volume de pièces d'une entreprise
+   * concurrente se lisaient en une requête, pour qui connaissait son UUID
+   * — ce qu'un ancien collaborateur retient sans effort.
+   */
+  {
+    const own = [
+      ["get_active_subscription", { p_org_id: a.orgId }],
+      ["count_users", { p_org_id: a.orgId }],
+      ["count_documents_this_period", { p_org_id: a.orgId }],
+    ];
+    const refused = [];
+    for (const [name, args] of own) {
+      const { error } = await a.client.rpc(name, args);
+      if (error) refused.push(`${name} (${error.message})`);
+    }
+    check(
+      refused.length === 0,
+      "un propriétaire lit toujours les chiffres de SON organisation",
+      refused.join(", "),
+    );
+
+    const leaked = [];
+    for (const [name] of own) {
+      const { error } = await a.client.rpc(name, { p_org_id: b.orgId });
+      if (!error) leaked.push(name);
+    }
+    check(
+      leaked.length === 0,
+      "A n'obtient ni le plan, ni l'effectif, ni le volume de pièces de B",
+      `ont répondu : ${leaked.join(", ")}`,
+    );
+  }
+
+  /**
    * ABONNEMENTS ET PAIEMENTS
    *
    * L'argent est la surface la plus tentante du produit. Trois choses

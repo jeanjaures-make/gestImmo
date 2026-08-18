@@ -137,6 +137,31 @@ if (anyReceipt?.number) {
   }
 }
 
+// Ces trois-là restent ouvertes à `authenticated` — l'application en a
+// besoin — mais uniquement pour l'organisation de l'appelant. Avec la clé
+// anonyme, aucune session, donc aucun périmètre : elles doivent refuser.
+{
+  const anon = createClient(
+    env.NEXT_PUBLIC_SUPABASE_URL,
+    env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    { auth: { persistSession: false, autoRefreshToken: false } },
+  );
+  const scoped = ["get_active_subscription", "count_users", "count_documents_this_period"];
+  const open = [];
+  for (const name of scoped) {
+    const { error } = await anon.rpc(name, { p_org_id: "00000000-0000-0000-0000-000000000000" });
+    if (!error) open.push(name);
+  }
+  if (open.length === 0) {
+    ok("les chiffres d'une organisation ne se lisent pas sans session");
+  } else {
+    ko(
+      "les chiffres d'une organisation ne se lisent pas sans session",
+      `répondent à la clé anonyme : ${open.join(", ")} — subscriptions.sql à rejouer`,
+    );
+  }
+}
+
 console.log("\nABONNEMENTS (subscriptions.sql)");
 await columns("plans", [
   "id", "slug", "name", "price", "currency", "duration_days",

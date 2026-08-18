@@ -236,6 +236,48 @@ ALTER TABLE payment_events ENABLE ROW LEVEL SECURITY;
 -- Aucune policy : inaccessible aux clients. Seul le client admin écrit.
 
 -- =====================================================================
+-- GARDE DE PÉRIMÈTRE — un identifiant d'organisation n'est pas un droit.
+--
+-- Les trois fonctions qui suivent prennent un `organization_id` en
+-- paramètre et sont SECURITY DEFINER : le RLS ne s'y applique donc PAS.
+-- Rien n'obligeait l'appelant à demander SA propre organisation. Un
+-- client authentifié pouvait lire le plan, le tarif et l'échéance d'une
+-- entreprise concurrente, son nombre d'utilisateurs et son volume de
+-- pièces émises — s'il en connaissait l'UUID, ce qu'un ancien
+-- collaborateur retient sans effort.
+--
+-- Le paramètre reste : le serveur en a besoin, lui qui agit hors session.
+-- Mais il n'est libre que pour `service_role`. Sous une session, il doit
+-- désigner l'organisation de l'appelant, sans quoi la fonction refuse —
+-- bruyamment. Rendre zéro serait pire que le mal : un « 0 pièce émise »
+-- se confondrait avec un quota intact, et une lecture illégitime
+-- passerait pour une réponse normale.
+--
+-- Le rôle se lit dans les revendications du jeton, et non dans
+-- `current_user` : à l'intérieur d'une fonction SECURITY DEFINER, celui-ci
+-- désigne le PROPRIÉTAIRE de la fonction, jamais l'appelant.
+-- =====================================================================
+CREATE OR REPLACE FUNCTION assert_own_organization(p_org_id UUID)
+RETURNS VOID
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF COALESCE(
+       NULLIF(current_setting('request.jwt.claims', true), '')::jsonb ->> 'role',
+       ''
+     ) = 'service_role' THEN
+    RETURN;
+  END IF;
+
+  IF p_org_id IS DISTINCT FROM current_organization_id() THEN
+    RAISE EXCEPTION 'Organisation hors périmètre.' USING ERRCODE = '42501';
+  END IF;
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION assert_own_organization(UUID) FROM PUBLIC, anon;
+GRANT  EXECUTE ON FUNCTION assert_own_organization(UUID) TO authenticated, service_role;
+
+-- =====================================================================
 -- FONCTION — abonnement actif d'une organisation.
 --
 -- Retourne l'abonnement non expiré le plus récent, avec le plan joint.
@@ -265,7 +307,11 @@ RETURNS TABLE (
   status subscription_status,
   expires_at TIMESTAMPTZ
 )
-LANGUAGE SQL STABLE SECURITY DEFINER SET search_path = public AS $$
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  PERFORM assert_own_organization(p_org_id);
+
+  RETURN QUERY
   SELECT s.id, p.id, p.slug, p.name, p.price, p.currency,
          p.document_limit, p.user_limit,
          p.is_unlimited_documents, p.is_unlimited_users, p.is_launch_offer,
@@ -278,9 +324,14 @@ LANGUAGE SQL STABLE SECURITY DEFINER SET search_path = public AS $$
     AND s.expires_at > NOW()
   ORDER BY s.created_at DESC
   LIMIT 1;
+END;
 $$;
 
-GRANT EXECUTE ON FUNCTION get_active_subscription(UUID) TO anon, authenticated;
+-- `anon` n'a jamais eu de raison de lire un abonnement, et le GRANT
+-- nominatif ne suffisait pas à l'en écarter : le droit par défaut de
+-- PUBLIC subsistait derrière lui.
+REVOKE EXECUTE ON FUNCTION get_active_subscription(UUID) FROM PUBLIC, anon;
+GRANT  EXECUTE ON FUNCTION get_active_subscription(UUID) TO authenticated, service_role;
 
 -- =====================================================================
 -- FONCTION — compte des pièces émises sur la période en cours.
@@ -298,6 +349,8 @@ DECLARE
   v_count   INT := 0;
   v_sub     RECORD;
 BEGIN
+  PERFORM assert_own_organization(p_org_id);
+
   SELECT s.started_at, s.expires_at
     INTO v_started, v_expires
   FROM subscriptions s
@@ -324,18 +377,23 @@ BEGIN
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION count_documents_this_period(UUID) TO authenticated;
+REVOKE EXECUTE ON FUNCTION count_documents_this_period(UUID) FROM PUBLIC, anon;
+GRANT  EXECUTE ON FUNCTION count_documents_this_period(UUID) TO authenticated, service_role;
 
 -- =====================================================================
 -- FONCTION — compte des utilisateurs d'une organisation.
 -- =====================================================================
 CREATE OR REPLACE FUNCTION count_users(p_org_id UUID)
 RETURNS INT
-LANGUAGE SQL STABLE SECURITY DEFINER SET search_path = public AS $$
-  SELECT COUNT(*)::INT FROM profiles WHERE organization_id = p_org_id;
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  PERFORM assert_own_organization(p_org_id);
+  RETURN (SELECT COUNT(*)::INT FROM profiles WHERE organization_id = p_org_id);
+END;
 $$;
 
-GRANT EXECUTE ON FUNCTION count_users(UUID) TO authenticated;
+REVOKE EXECUTE ON FUNCTION count_users(UUID) FROM PUBLIC, anon;
+GRANT  EXECUTE ON FUNCTION count_users(UUID) TO authenticated, service_role;
 
 -- =====================================================================
 -- TRIGGER — updated_at automatique sur subscriptions et payments.
