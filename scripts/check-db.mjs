@@ -90,6 +90,53 @@ if (anyReceipt?.number) {
   console.log("  · lien profond non vérifiable : aucune pièce en base");
 }
 
+// Toutes ces fonctions sont réservées au serveur. Le piège qu'elles ont
+// partagé : `REVOKE ... FROM anon, authenticated` ne retire rien, car le
+// droit d'exécution accordé par défaut appartient à PUBLIC, dont ces deux
+// rôles héritent. La garde se lisait dans le fichier sans exister en base.
+//
+// La sonde interroge avec la clé ANONYME — celle qui part dans le
+// navigateur. Un refus de PostgREST (42501, ou fonction absente du cache)
+// prouve la révocation ; toute autre issue signifie qu'un visiteur peut
+// appeler la fonction, ce qui, pour `confirm_payment`, revient à
+// s'activer un abonnement sans payer.
+{
+  const anon = createClient(
+    env.NEXT_PUBLIC_SUPABASE_URL,
+    env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    { auth: { persistSession: false, autoRefreshToken: false } },
+  );
+  const NIL = "00000000-0000-0000-0000-000000000000";
+  const reserved = [
+    ["confirm_payment", { p_transaction_id: "SONDE", p_method: null }],
+    ["fail_payment", { p_transaction_id: "SONDE" }],
+    ["sweep_subscriptions", {}],
+    ["confirm_signup_payment", { p_transaction_id: "SONDE", p_method: null }],
+    ["provision_signup_intent", { p_intent_id: NIL, p_user_id: NIL }],
+    ["fail_signup_intent", { p_transaction_id: "SONDE" }],
+    ["claim_signup_intent", { p_intent_id: NIL }],
+    ["signup_intent_status", { p_intent_id: NIL }],
+    ["create_organization", { org_name: "Sonde", first_name: "", last_name: "" }],
+    ["next_document_number", { p_organization: NIL, p_kind: "receipt", p_year: 2026 }],
+  ];
+
+  const reachable = [];
+  for (const [name, args] of reserved) {
+    const { error } = await anon.rpc(name, args);
+    const blocked = error && (error.code === "42501" || error.code === "PGRST202");
+    if (!blocked) reachable.push(name);
+  }
+
+  if (reachable.length === 0) {
+    ok(`${reserved.length} fonctions réservées au serveur sont hors d'atteinte de la clé anonyme`);
+  } else {
+    ko(
+      "fonctions réservées au serveur",
+      `atteignables avec la clé anonyme : ${reachable.join(", ")} — schema.sql ET subscriptions.sql à rejouer`,
+    );
+  }
+}
+
 console.log("\nABONNEMENTS (subscriptions.sql)");
 await columns("plans", [
   "id", "slug", "name", "price", "currency", "duration_days",

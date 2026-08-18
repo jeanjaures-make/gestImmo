@@ -169,15 +169,45 @@ try {
   const a = await signedInUser("a");
   const b = await signedInUser("b");
 
+  // Une organisation ne naît plus que d'un paiement confirmé. `create_organization`
+  // est révoquée pour `authenticated` : le semis passe donc par la clé de
+  // service, comme le fait `provision_signup_intent` en production.
   for (const [tag, u] of [["A", a], ["B", b]]) {
-    const { data, error } = await u.client.rpc("create_organization", {
-      org_name: `Vérification ${tag} ${stamp}`, first_name: "Test", last_name: tag,
+    const { data: org, error: orgErr } = await admin.from("organizations")
+      .insert({ name: `Vérification ${tag} ${stamp}`, slug: `verif-${tag.toLowerCase()}-${stamp}` })
+      .select("id").single();
+    if (orgErr) throw new Error(`organisation ${tag} : ${orgErr.message}`);
+
+    const { error: profErr } = await admin.from("profiles").insert({
+      id: u.id, organization_id: org.id, firstname: "Test", lastname: tag,
+      email: u.email, role: "owner",
     });
-    if (error) throw new Error(`create_organization ${tag} : ${error.message}`);
-    u.orgId = data;
-    created.orgs.push(data);
+    if (profErr) throw new Error(`profil ${tag} : ${profErr.message}`);
+
+    u.orgId = org.id;
+    created.orgs.push(org.id);
   }
-  check(true, "create_organization crée l'organisation et son profil propriétaire");
+
+  // Et la porte que ce semis contourne doit rester close. Un compte
+  // authentifié SANS profil — collaborateur retiré dont le compte a
+  // survécu, inscription de l'ancien parcours restée en plan — pouvait
+  // s'ouvrir une organisation en une requête à PostgREST, sans rien payer.
+  {
+    const orphan = await signedInUser("orphelin");
+    const { data: forged, error: rpcErr } = await orphan.client.rpc("create_organization", {
+      org_name: `Contournement ${stamp}`, first_name: "", last_name: "",
+    });
+    // Sur un schéma pas encore corrigé, l'appel ABOUTIT : l'assertion
+    // échouera, mais l'organisation ainsi créée doit être nettoyée comme
+    // les autres, sans quoi la vérification laisse derrière elle
+    // exactement ce qu'elle dénonce.
+    if (forged) created.orgs.push(forged);
+    check(
+      Boolean(rpcErr),
+      "un compte sans profil ne se fabrique pas une organisation sans payer",
+      "create_organization a été acceptée",
+    );
+  }
 
   const { data: receipt, error: rErr } = await a.client
     .from("receipts").insert(receiptDraft(a.orgId)).select().single();
@@ -428,6 +458,49 @@ try {
     "un propriétaire promeut toujours un collaborateur",
     `rôle resté ${promoted.role}${promoteErr ? ` (${promoteErr.message})` : ""}`,
   );
+
+  /**
+   * Les fonctions réservées au serveur ne s'appellent pas depuis une session.
+   *
+   * L'attaquant réaliste n'est pas anonyme : c'est un client légitime, au
+   * rôle le plus faible, qui connaît l'API que son propre navigateur
+   * emploie. `confirm_payment` lui suffirait à s'activer un abonnement
+   * sans payer ; `sweep_subscriptions` à faire expirer ceux de tout le
+   * monde ; `provision_signup_intent` à se fabriquer une organisation.
+   *
+   * Ces fonctions portaient bien un `REVOKE ... FROM anon, authenticated`
+   * — mais il ne retirait rien : PostgreSQL accorde EXECUTE à PUBLIC, dont
+   * ces deux rôles héritent, et l'on ne révoque pas un droit qu'ils ne
+   * détiennent pas en propre. La garde se lisait dans le fichier sans
+   * exister en base. Elle porte désormais sur PUBLIC.
+   */
+  {
+    const NIL = "00000000-0000-0000-0000-000000000000";
+    const reserved = [
+      ["confirm_payment", { p_transaction_id: "SONDE", p_method: null }],
+      ["fail_payment", { p_transaction_id: "SONDE" }],
+      ["sweep_subscriptions", {}],
+      ["confirm_signup_payment", { p_transaction_id: "SONDE", p_method: null }],
+      ["provision_signup_intent", { p_intent_id: NIL, p_user_id: NIL }],
+      ["fail_signup_intent", { p_transaction_id: "SONDE" }],
+      ["claim_signup_intent", { p_intent_id: NIL }],
+      ["signup_intent_status", { p_intent_id: NIL }],
+      ["next_document_number", { p_organization: NIL, p_kind: "receipt", p_year: 2026 }],
+    ];
+
+    const reachable = [];
+    for (const [name, args] of reserved) {
+      const { error } = await reader.client.rpc(name, args);
+      if (!error || (error.code !== "42501" && error.code !== "PGRST202")) {
+        reachable.push(name);
+      }
+    }
+    check(
+      reachable.length === 0,
+      "un lecteur n'atteint aucune fonction réservée au serveur",
+      `atteignables : ${reachable.join(", ")}`,
+    );
+  }
 
   /**
    * ABONNEMENTS ET PAIEMENTS

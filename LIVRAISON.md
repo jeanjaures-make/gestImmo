@@ -78,13 +78,12 @@ son mot de passe doit passer par son gestionnaire, qui lui régénère un lien
 depuis l'écran Équipe. C'est acceptable pour un lancement, pas à
 l'échelle — d'où le raccordement recommandé.
 
-`lib/auth-config.ts` (`signupMode`, `AUTH_REQUIRE_EMAIL_CONFIRMATION`) et
-les fonctions `signUp`/`signUpInstant`/`signUpWithConfirmation` de
-`app/(auth)/login/actions.ts` datent du parcours antérieur, où
-l'inscription créait le compte directement. Aucune route ne les appelle
-plus depuis que l'inscription passe par le paiement confirmé — laissés en
-place plutôt que supprimés dans le cadre de ce changement, en attendant une
-décision délibérée de les retirer.
+Le parcours antérieur — inscription libre, organisation créée dans la
+foulée — ne laisse plus de code derrière lui : `lib/auth-config.ts`,
+`signUp`/`signUpInstant`/`signUpWithConfirmation` et le formulaire
+d'onboarding ont été retirés. `/onboarding` subsiste, mais n'est plus une
+mise en route : c'est une impasse explicative pour un compte dont le
+profil a disparu.
 
 ### Suivi d'erreurs — une variable suffit
 
@@ -156,6 +155,30 @@ La section « INSCRIPTION SUBORDONNÉE AU PAIEMENT » doit être entièrement
 verte. `npm run verify:rls` en apporte la preuve fonctionnelle — paiement
 pending/failed/cancelled sans compte, double webhook sans doublon, montant
 forgé refusé avant même d'être écrit.
+
+### À rejouer sans attendre — la dernière porte gratuite
+
+`supabase/schema.sql` révoque désormais `create_organization` pour `anon`
+et `authenticated`. Sans ce REVOKE, la fonction hérite du droit
+d'exécution accordé par défaut à PUBLIC : elle est `SECURITY DEFINER` et
+n'exige qu'un compte authentifié **sans profil**. PostgREST étant
+joignable directement, un tel compte pouvait se fabriquer une
+organisation en une requête, sans rien payer — ce que tout le reste de ce
+changement s'emploie à empêcher.
+
+Un tel compte n'a rien de théorique : un collaborateur retiré de son
+équipe garde son compte d'authentification si la clé de service manque au
+moment du retrait, et les inscriptions de l'ancien parcours libre ont pu
+s'interrompre avant l'onboarding.
+
+Depuis ce correctif, une organisation naît par **un seul chemin** :
+`provision_signup_intent`, appelée par le webhook après encaissement
+confirmé.
+
+`npm run check:db` le vérifie en interrogeant la fonction avec la clé
+anonyme : un refus de PostgREST prouve la révocation, tandis qu'un refus
+de la fonction elle-même (« Authentification requise ») trahit un droit
+encore ouvert.
 
 ### À rejouer sans attendre — correctif de sécurité
 

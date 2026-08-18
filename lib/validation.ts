@@ -136,11 +136,6 @@ export const credentialsSchema = z.object({
   password: z.string().min(1, { message: "Saisissez votre mot de passe." }),
 });
 
-export const signupSchema = z.object({
-  email: z.email({ message: "Adresse e-mail invalide." }),
-  password: passwordSchema,
-});
-
 export const emailSchema = z.object({
   email: z.email({ message: "Adresse e-mail invalide." }),
 });

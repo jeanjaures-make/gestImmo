@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { AlertTriangle, Loader2 } from "lucide-react";
 import Link from "next/link";
 
@@ -34,12 +34,16 @@ type Status =
 export function SignupClaim({ intentRef }: { intentRef: string }) {
   const [status, setStatus] = useState<Status>("checking");
   const [claiming, setClaiming] = useState(false);
-  const startedAt = useRef(Date.now());
   const [slow, setSlow] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout>;
+
+    // Lu ici et non au rendu : `Date.now()` est impure, et un rendu de plus
+    // en décalerait l'origine. L'effet ne s'exécute qu'une fois par
+    // inscription, ce qui est exactement la portée voulue.
+    const startedAt = Date.now();
 
     /**
      * Espacement croissant plutôt qu'un rythme fixe.
@@ -52,7 +56,7 @@ export function SignupClaim({ intentRef }: { intentRef: string }) {
      * à mesure que l'attente se prolonge.
      */
     function delay() {
-      const waited = Date.now() - startedAt.current;
+      const waited = Date.now() - startedAt;
       if (waited < 30_000) return 2_500;
       if (waited < 120_000) return 5_000;
       return 10_000;
@@ -60,7 +64,7 @@ export function SignupClaim({ intentRef }: { intentRef: string }) {
 
     function again() {
       if (cancelled) return;
-      if (Date.now() - startedAt.current > 60_000) setSlow(true);
+      if (Date.now() - startedAt > 60_000) setSlow(true);
       timer = setTimeout(poll, delay());
     }
 

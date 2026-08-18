@@ -160,8 +160,14 @@ export async function removeMember(
   if (error) return { error: error.message };
 
   // Le compte d'authentification n'est supprimé que si l'on dispose des
-  // droits admin ; sinon le profil disparaît, ce qui suffit à couper l'accès
-  // (aucun profil ⇒ aucune organisation ⇒ redirection vers l'onboarding).
+  // droits admin. Sans eux, le profil disparaît et le compte survit : son
+  // titulaire peut encore se connecter, mais il n'atteint plus rien —
+  // `/onboarding` ne lui propose qu'une explication et le choix d'une
+  // offre, et `create_organization` est révoquée pour `authenticated`.
+  //
+  // Cette dernière garde n'est pas décorative : tant que la RPC était
+  // ouverte, un collaborateur retiré pouvait se fabriquer une organisation
+  // en une requête à PostgREST, sans rien payer. Voir `supabase/schema.sql`.
   const admin = createAdminClient();
   if (admin) await admin.auth.admin.deleteUser(memberId);
 

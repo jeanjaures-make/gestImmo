@@ -461,7 +461,8 @@ END;
 $$;
 
 -- Seule la clé de service appelle cette fonction, depuis le webhook.
-REVOKE EXECUTE ON FUNCTION confirm_payment(TEXT, TEXT) FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION confirm_payment(TEXT, TEXT) FROM PUBLIC, anon, authenticated;
+GRANT  EXECUTE ON FUNCTION confirm_payment(TEXT, TEXT) TO service_role;
 
 -- =====================================================================
 -- ÉCHEC D'UN PAIEMENT — refus, annulation, montant divergent.
@@ -493,7 +494,8 @@ BEGIN
 END;
 $$;
 
-REVOKE EXECUTE ON FUNCTION fail_payment(TEXT, payment_status) FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION fail_payment(TEXT, payment_status) FROM PUBLIC, anon, authenticated;
+GRANT  EXECUTE ON FUNCTION fail_payment(TEXT, payment_status) TO service_role;
 
 -- =====================================================================
 -- INSCRIPTION SUBORDONNÉE AU PAIEMENT
@@ -654,7 +656,8 @@ BEGIN
 END;
 $$;
 
-REVOKE EXECUTE ON FUNCTION confirm_signup_payment(TEXT, TEXT) FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION confirm_signup_payment(TEXT, TEXT) FROM PUBLIC, anon, authenticated;
+GRANT  EXECUTE ON FUNCTION confirm_signup_payment(TEXT, TEXT) TO service_role;
 
 -- =====================================================================
 -- PROVISIONNEMENT — organisation, profil propriétaire, abonnement actif.
@@ -742,7 +745,8 @@ BEGIN
 END;
 $$;
 
-REVOKE EXECUTE ON FUNCTION provision_signup_intent(UUID, UUID) FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION provision_signup_intent(UUID, UUID) FROM PUBLIC, anon, authenticated;
+GRANT  EXECUTE ON FUNCTION provision_signup_intent(UUID, UUID) TO service_role;
 
 -- =====================================================================
 -- ÉCHEC D'UN PAIEMENT D'INSCRIPTION — refus, annulation.
@@ -785,7 +789,8 @@ BEGIN
 END;
 $$;
 
-REVOKE EXECUTE ON FUNCTION fail_signup_intent(TEXT, payment_status) FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION fail_signup_intent(TEXT, payment_status) FROM PUBLIC, anon, authenticated;
+GRANT  EXECUTE ON FUNCTION fail_signup_intent(TEXT, payment_status) TO service_role;
 
 -- =====================================================================
 -- CLAIM — ouvre la session, une seule fois par intention.
@@ -816,7 +821,8 @@ BEGIN
 END;
 $$;
 
-REVOKE EXECUTE ON FUNCTION claim_signup_intent(UUID) FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION claim_signup_intent(UUID) FROM PUBLIC, anon, authenticated;
+GRANT  EXECUTE ON FUNCTION claim_signup_intent(UUID) TO service_role;
 
 -- =====================================================================
 -- STATUT PUBLIC D'UNE INTENTION — lu par /api/signup/status.
@@ -832,7 +838,8 @@ LANGUAGE SQL STABLE SECURITY DEFINER SET search_path = public AS $$
   SELECT status::TEXT FROM signup_intents WHERE id = p_intent_id;
 $$;
 
-REVOKE EXECUTE ON FUNCTION signup_intent_status(UUID) FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION signup_intent_status(UUID) FROM PUBLIC, anon, authenticated;
+GRANT  EXECUTE ON FUNCTION signup_intent_status(UUID) TO service_role;
 
 -- =====================================================================
 -- BALAYAGE — remet les statuts en accord avec l'horloge.
@@ -926,4 +933,5 @@ BEGIN
 END;
 $$;
 
-REVOKE EXECUTE ON FUNCTION sweep_subscriptions() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION sweep_subscriptions() FROM PUBLIC, anon, authenticated;
+GRANT  EXECUTE ON FUNCTION sweep_subscriptions() TO service_role;

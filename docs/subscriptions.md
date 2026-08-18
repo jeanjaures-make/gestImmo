@@ -67,6 +67,16 @@ nouveau chemin ci-dessus. Dans les deux cas, mêmes gardes en amont :
 signature HMAC, re-vérification serveur auprès de Moneroo, montant et
 devise comparés à `plans.price` — jamais au corps de la notification.
 
+**Une organisation naît par un seul chemin.** `create_organization` —
+qui servait l'ancien onboarding — est révoquée pour `anon` et
+`authenticated` dans `supabase/schema.sql`. Elle est `SECURITY DEFINER`
+et n'exigeait qu'un compte authentifié sans profil : un collaborateur
+retiré de son équipe, ou une inscription de l'ancien parcours restée en
+plan, pouvait donc s'ouvrir une organisation en une requête à PostgREST,
+sans rien payer. Le formulaire n'était pas la frontière ; le droit
+d'exécution l'est. `provision_signup_intent`, appelée par le webhook après
+encaissement confirmé, est désormais la seule à en créer.
+
 **Preuves** : `npm run verify:rls`, section « INSCRIPTION SUBORDONNÉE AU
 PAIEMENT » (paiement pending/failed/cancelled → aucun compte, double
 webhook simultané → un seul compte, montant forgé → refusé avant même

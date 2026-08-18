@@ -1,30 +1,49 @@
 import { redirect } from "next/navigation";
 import { Building2 } from "lucide-react";
+import Link from "next/link";
 
-import { OnboardingForm } from "@/components/onboarding-form";
-import { Card, CardContent } from "@/components/ui/kit";
+import { Button, Card, CardContent } from "@/components/ui/kit";
 import { getSession } from "@/lib/auth";
-import { safePlanSlug } from "@/lib/plan-choice";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 
-export const metadata = { title: "Votre organisation — CaisseOps" };
+/**
+ * Impasse explicative pour un compte rattaché à aucune organisation.
+ *
+ * ─── Ce que cet écran ÉTAIT, et pourquoi il ne l'est plus ───────────────
+ * Il portait le formulaire de création d'organisation : on s'inscrivait,
+ * on nommait son entreprise, et l'espace existait — le paiement venait
+ * après, ou jamais. Depuis que l'inscription est subordonnée au paiement,
+ * une organisation naît par un seul chemin : `provision_signup_intent`,
+ * appelée par le webhook Moneroo après encaissement confirmé. La RPC
+ * `create_organization` est révoquée pour `authenticated` : ce formulaire
+ * n'aurait plus rien pu créer, et le laisser aurait promis un geste que
+ * la base refuse.
+ *
+ * ─── Qui atterrit ici, alors ────────────────────────────────────────────
+ * Une anomalie, jamais un parcours : un compte authentifié dont le profil
+ * a disparu. Un collaborateur retiré de son équipe dont le compte
+ * d'authentification a survécu au retrait (clé de service absente à ce
+ * moment-là), ou une inscription de l'ancien parcours libre restée en
+ * plan. Les renvoyer sans un mot les laisserait tourner en rond entre
+ * `/login` et un tableau de bord qui les rejette.
+ *
+ * Le chemin de sortie est le même que pour tout le monde : choisir une
+ * offre, et payer. C'est précisément ce que cet écran ne fait plus à leur
+ * place.
+ *
+ * Le nom de route est conservé — `lib/auth.ts` y renvoie, `app/robots.ts`
+ * l'exclut déjà de l'indexation — mais il ne décrit plus une mise en
+ * route : il nomme une sortie de secours.
+ */
+export const metadata = { title: "Compte sans organisation — CaisseOps" };
 
-export default async function OnboardingPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ plan?: string }>;
-}) {
+export default async function OnboardingPage() {
   if (!isSupabaseConfigured()) redirect("/setup");
 
   const session = await getSession();
   if (session === null) redirect("/login");
   // Déjà rattaché à une organisation : rien à faire ici.
   if (session !== "no-profile") redirect("/dashboard");
-
-  // L'offre choisie avant l'inscription voyage jusqu'ici, pour ramener la
-  // personne au paiement de CE plan une fois son entreprise nommée.
-  const { plan } = await searchParams;
-  const chosen = safePlanSlug(plan);
 
   return (
     <main className="flex min-h-screen items-center justify-center p-6">
@@ -39,15 +58,34 @@ export default async function OnboardingPage({
         <Card>
           <CardContent className="p-6">
             <h1 className="font-heading mb-1 text-lg font-semibold">
-              Créons votre organisation
+              Votre compte n&apos;est rattaché à aucune organisation
             </h1>
             <p className="mb-6 text-sm text-muted-foreground">
-              Elle cloisonne l&apos;intégralité de vos données et porte
-              l&apos;en-tête de vos pièces. Vous en serez le propriétaire et
-              pourrez y inviter des collaborateurs.
+              Cela arrive après le retrait d&apos;une équipe, ou si une
+              inscription ne s&apos;est jamais achevée. Vos identifiants
+              restent valables : il ne leur manque qu&apos;un abonnement pour
+              ouvrir un espace.
             </p>
 
-            <OnboardingForm plan={chosen} />
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <Link href="/offres" className="sm:flex-1">
+                <Button className="w-full">Choisir une offre</Button>
+              </Link>
+              {/* POST, comme dans l'en-tête du back-office : la route
+                  refuse le GET, qu'un préchargement de lien suffirait à
+                  déclencher. */}
+              <form action="/auth/signout" method="post" className="sm:flex-1">
+                <Button type="submit" variant="outline" className="w-full">
+                  Se déconnecter
+                </Button>
+              </form>
+            </div>
+
+            <p className="mt-6 text-xs text-muted-foreground">
+              Si vous avez été retiré d&apos;une équipe par erreur, demandez à
+              son propriétaire de vous inviter à nouveau — vous retrouverez
+              alors vos pièces, sans souscrire quoi que ce soit.
+            </p>
           </CardContent>
         </Card>
       </div>

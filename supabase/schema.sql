@@ -367,6 +367,28 @@ BEGIN
 END;
 $$;
 
+
+-- ---------------------------------------------------------------------
+-- Réservée au serveur — et pourquoi « FROM PUBLIC » et non « FROM anon ».
+--
+-- PostgreSQL accorde EXECUTE à **PUBLIC** dès la création d'une fonction.
+-- `anon` et `authenticated` n'en tiennent pas un droit propre : ils en
+-- héritent. Les révoquer nommément ne retire donc RIEN — la révocation
+-- s'applique à un droit qu'ils n'avaient pas, et l'appel reste possible.
+-- C'est un no-op qui se lit comme une garde, ce qui est pire que pas de
+-- garde du tout.
+--
+-- Il faut révoquer PUBLIC, puis rendre le droit à `service_role`, qui ne
+-- le tenait lui aussi que de là. Ce motif vaut pour toutes les fonctions
+-- réservées au serveur, ici comme dans `subscriptions.sql`.
+--
+-- Sans cela, un visiteur muni de la seule clé anonyme — celle qui part
+-- dans le navigateur — pouvait consommer les numéros de n'importe quelle
+-- organisation, et trouer sa numérotation à distance.
+-- ---------------------------------------------------------------------
+REVOKE EXECUTE ON FUNCTION next_document_number(UUID, document_kind, INT) FROM PUBLIC, anon, authenticated;
+GRANT  EXECUTE ON FUNCTION next_document_number(UUID, document_kind, INT) TO service_role;
+
 DROP TRIGGER IF EXISTS receipts_number ON receipts;
 CREATE TRIGGER receipts_number BEFORE INSERT ON receipts
   FOR EACH ROW EXECUTE FUNCTION assign_document_number('receipt');
@@ -550,6 +572,29 @@ BEGIN
   RETURN v_org_id;
 END;
 $$;
+
+-- ---------------------------------------------------------------------
+-- Réservée au service_role — plus aucune organisation ne naît d'un clic.
+--
+-- Sans ce REVOKE, la fonction héritait du droit d'exécution accordé par
+-- défaut à PUBLIC. Elle est SECURITY DEFINER et ne demande qu'une chose :
+-- un utilisateur authentifié qui n'a pas encore de profil. Or PostgREST
+-- est joignable directement — le formulaire n'est pas la frontière. Tout
+-- compte dans cet état pouvait donc se fabriquer une organisation sans
+-- avoir rien payé, en une requête.
+--
+-- Un tel compte n'a rien de théorique : un collaborateur retiré de son
+-- équipe garde son compte d'authentification si la clé de service manque
+-- au moment du retrait, et les inscriptions de l'ancien parcours libre
+-- ont pu s'interrompre avant l'onboarding.
+--
+-- Depuis que l'inscription est subordonnée au paiement, une organisation
+-- naît par UN seul chemin : `provision_signup_intent`, appelée par le
+-- webhook Moneroo après encaissement confirmé. Voir
+-- `docs/subscriptions.md`.
+-- ---------------------------------------------------------------------
+REVOKE EXECUTE ON FUNCTION create_organization(TEXT, TEXT, TEXT) FROM PUBLIC, anon, authenticated;
+GRANT  EXECUTE ON FUNCTION create_organization(TEXT, TEXT, TEXT) TO service_role;
 
 /**
  * Recherche globale sur les trois pièces.
