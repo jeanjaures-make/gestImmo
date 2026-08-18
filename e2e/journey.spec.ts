@@ -56,22 +56,42 @@ async function openCreationPanel(page: Page, trigger: string) {
 test("de l'inscription à l'export comptable du premier carnet", async ({
   page,
 }) => {
-  // ------------------------------------------------------- 1. Inscription
+  // -------------------------------------------------- 1. Choix de l'offre
+  // On choisit AVANT de s'inscrire : arriver sur /signup sans offre
+  // renvoie ici, et le test le vérifie en y entrant par la porte nue.
+  await page.goto("/signup");
+  await page.waitForURL("**/offres");
+
+  // Les prix affichés viennent de `plans`, pas du code de la page.
+  await expect(shown(page, "3 000 F CFA")).toBeVisible();
+  await page.getByRole("link", { name: "Choisir Starter" }).click();
+
+  // ------------------------------------------------------- 2. Inscription
   // Par le formulaire public, exactement comme un client. Aucun e-mail
   // n'intervient : le mode « instant » crée le compte confirmé côté
   // serveur et ouvre la session dans la foulée.
-  await page.goto("/signup");
+  await page.waitForURL(
+    (url) =>
+      url.pathname === "/signup" && url.searchParams.get("plan") === "starter",
+  );
+  // L'offre retenue reste sous les yeux pendant la saisie.
+  await expect(shown(page, /Offre choisie/)).toBeVisible();
   await page.getByLabel("Adresse e-mail").fill(ownerEmail);
   await page.getByLabel("Mot de passe").fill(TEST_PASSWORD);
   await page.getByRole("button", { name: "Créer mon compte" }).click();
 
-  // Un compte sans organisation atterrit sur l'écran de création.
-  await page.waitForURL("**/onboarding");
+  // Le choix survit à l'inscription : il voyage jusqu'à l'onboarding.
+  await page.waitForURL(
+    (url) =>
+      url.pathname === "/onboarding" && url.searchParams.get("plan") === "starter",
+  );
 
-  // ----------------------------------------------------- 2. Organisation
+  // ----------------------------------------------------- 3. Organisation
   // L'en-tête imprimé est demandé dès l'inscription : c'est lui qui fait
   // que la première pièce ressemble à l'entreprise, pas à un formulaire.
-  await page.goto("/onboarding");
+  // On ne renavigue PAS vers /onboarding : la redirection nous y a déjà
+  // déposés avec le choix d'offre en paramètre, et un `goto` nu le
+  // perdrait — le formulaire retomberait alors vers le tableau de bord.
   await page.getByLabel("Nom de l'organisation").fill(orgName);
   await page.getByLabel("Prénom", { exact: true }).fill("Awa");
   await page.getByLabel("Nom", { exact: true }).fill("Diallo");
@@ -79,7 +99,17 @@ test("de l'inscription à l'export comptable du premier carnet", async ({
   await page.getByLabel("Téléphone").fill("+225 27 21 00 00 00");
   await page.getByLabel("Adresse", { exact: true }).fill("Zone industrielle, lot 12");
   await page.getByRole("button", { name: "Ouvrir mon espace" }).click();
-  await page.waitForURL("**/dashboard");
+
+  // Une offre ayant été choisie, on est ramené au paiement de CELLE-CI
+  // plutôt qu'au tableau de bord : sans abonnement, aucune pièce ne peut
+  // être émise, et rien sur le tableau de bord ne l'expliquerait.
+  await page.waitForURL(
+    (url) =>
+      url.pathname === "/subscribe" && url.searchParams.get("plan") === "starter",
+  );
+  await expect(shown(page, /Vous aviez choisi l'offre Starter/)).toBeVisible();
+
+  await page.goto("/dashboard");
   await expect(
     page.getByRole("heading", { name: "Vue d'ensemble" }),
   ).toBeVisible();

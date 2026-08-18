@@ -19,6 +19,10 @@ const PUBLIC_PATHS = [
   "/auth",
   "/setup",
   "/legal",
+  // Le choix de l'offre précède l'inscription : il doit donc être
+  // consultable sans compte. L'oublier ici renvoyait vers la connexion
+  // toute personne cliquant « Commencer » — soit l'inverse du parcours.
+  "/offres",
   // Le webhook du fournisseur de paiement n'a pas de session Supabase :
   // il est donc public. Sa sécurité tient à la signature HMAC de la
   // notification, puis à une re-vérification serveur de la transaction.
@@ -44,7 +48,7 @@ const GUEST_ONLY_PATHS = ["/login", "/signup", "/forgot-password"];
  * `429 — Request rate limit reached` qui touchait alors les vrais
  * utilisateurs.
  */
-const ANONYMOUS_PATHS = ["/", "/setup"];
+const ANONYMOUS_PATHS = ["/", "/setup", "/offres"];
 
 /** Même logique, pour un préfixe entier : les pages légales. */
 const ANONYMOUS_PREFIXES = ["/legal/", "/payment/"];

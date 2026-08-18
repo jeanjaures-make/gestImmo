@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { LOGO_MAX_BYTES, LOGO_TYPES } from "@/lib/logo";
+import { safePlanSlug, withPlan } from "@/lib/plan-choice";
 import { reportError } from "@/lib/observability";
 import { createClient } from "@/lib/supabase/server";
 import { firstIssue, formDataToObject } from "@/lib/validation";
@@ -78,7 +79,13 @@ export async function createOrganization(
   await saveLetterhead(parsed.data, orgId);
 
   revalidatePath("/", "layout");
-  redirect("/dashboard");
+
+  // Une offre avait été choisie avant l'inscription : on ramène au
+  // paiement de celle-ci. Sans cela l'organisation existe, mais aucune
+  // pièce ne peut être émise et rien ne l'expliquerait sur le tableau
+  // de bord.
+  const plan = safePlanSlug(formData.get("plan"));
+  redirect(plan ? withPlan("/subscribe", plan) : "/dashboard");
 }
 
 /**

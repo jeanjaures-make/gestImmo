@@ -161,7 +161,7 @@ function Step({
   );
 }
 
-export function OnboardingForm() {
+export function OnboardingForm({ plan }: { plan: string | null }) {
   const [state, formAction] = useActionState<OnboardingState, FormData>(
     createOrganization,
     {},
@@ -169,6 +169,9 @@ export function OnboardingForm() {
 
   return (
     <form action={formAction} className="flex flex-col gap-8">
+      {/* L'offre choisie avant l'inscription, reportée jusqu'au paiement.
+          Simple fil conducteur : le tarif se lit dans `plans`. */}
+      {plan && <input type="hidden" name="plan" value={plan} />}
       <Step
         index={1}
         title="Votre organisation"

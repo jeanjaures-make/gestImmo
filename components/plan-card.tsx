@@ -18,9 +18,12 @@ import type { Plan } from "@/lib/types";
 export function PlanCard({
   plan,
   currentPlanSlug,
+  highlighted = false,
 }: {
   plan: Plan;
   currentPlanSlug?: string | null;
+  /** Offre retenue avant l'inscription : mise en avant, jamais imposée. */
+  highlighted?: boolean;
 }) {
   const [pending, startTransition] = useTransition();
   const [loading, setLoading] = useState(false);
@@ -95,6 +98,9 @@ export function PlanCard({
       className={cn(
         "relative flex flex-col rounded-2xl border bg-card p-6 text-card-foreground",
         isLaunch && "border-primary/50 shadow-lg",
+        // Le choix d'avant l'inscription prime visuellement sur l'offre de
+        // lancement : c'est celui que la personne cherche des yeux.
+        highlighted && "border-primary shadow-lg ring-2 ring-primary/30",
       )}
     >
       {isLaunch && (

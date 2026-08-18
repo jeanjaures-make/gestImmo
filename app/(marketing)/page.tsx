@@ -144,8 +144,8 @@ const PLANS = [
       "Impression à votre en-tête",
       "Un utilisateur",
     ],
-    cta: "Commencer gratuitement",
-    href: "/signup",
+    cta: "Choisir Starter",
+    href: "/signup?plan=starter",
   },
   {
     name: "Business",
@@ -158,8 +158,8 @@ const PLANS = [
       "Journal d'audit complet",
       "Cinq utilisateurs",
     ],
-    cta: "Commencer gratuitement",
-    href: "/signup",
+    cta: "Choisir Business",
+    href: "/signup?plan=business",
   },
   {
     name: "Illimité",
@@ -177,7 +177,7 @@ const PLANS = [
       "Accompagnement à la reprise de données",
     ],
     cta: "Profiter de l'offre",
-    href: "/signup",
+    href: "/signup?plan=unlimited",
     featured: true,
   },
 ];

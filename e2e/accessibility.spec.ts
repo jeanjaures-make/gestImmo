@@ -252,7 +252,8 @@ async function audit(page: Page, label: string) {
 for (const [label, path] of [
   ["Page d'accueil", "/"],
   ["Connexion", "/login"],
-  ["Inscription", "/signup"],
+  ["Offres", "/offres"],
+  ["Inscription", "/signup?plan=starter"],
   ["Mot de passe oublié", "/forgot-password"],
 ] as const) {
   test(`${label} respecte WCAG AA`, async ({ page }) => {

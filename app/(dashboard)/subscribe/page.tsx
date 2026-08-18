@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { PlanCard } from "@/components/plan-card";
 import { PageHeader } from "@/components/ui/kit";
 import { canAdminister, requireSession } from "@/lib/auth";
+import { safePlanSlug } from "@/lib/plan-choice";
 import { getActivePlans, getActiveSubscription } from "@/lib/subscriptions";
 
 export const metadata = { title: "Abonnement — CaisseOps" };
@@ -20,18 +21,24 @@ export const metadata = { title: "Abonnement — CaisseOps" };
 export default async function SubscribePage({
   searchParams,
 }: {
-  searchParams: Promise<{ reason?: string }>;
+  searchParams: Promise<{ reason?: string; plan?: string }>;
 }) {
   const { organization, profile } = await requireSession();
   if (!canAdminister(profile.role)) redirect("/dashboard");
 
-  const [{ reason }, plans, activeSub] = await Promise.all([
+  const [{ reason, plan: requested }, plans, activeSub] = await Promise.all([
     searchParams,
     getActivePlans(),
     getActiveSubscription(organization.id),
   ]);
 
   const currentPlanSlug = activeSub?.plan_slug ?? null;
+
+  // L'offre retenue au moment de l'inscription. On la met en avant plutôt
+  // que de la présélectionner en dur : la personne doit pouvoir changer
+  // d'avis ici, et la voir mise en évidence lui évite de la rechercher.
+  const chosenSlug = safePlanSlug(requested);
+  const chosen = plans.find((p) => p.slug === chosenSlug) ?? null;
 
   return (
     <>
@@ -46,6 +53,18 @@ export default async function SubscribePage({
           <p className="mt-0.5 text-muted-foreground">
             Le journal complet est inclus à partir de l&apos;offre Business.
             Choisissez un plan ci-dessous pour y accéder.
+          </p>
+        </div>
+      )}
+
+      {chosen && !activeSub && (
+        <div className="mb-6 rounded-lg border border-primary/40 bg-primary/5 p-4 text-sm">
+          <p className="font-medium">
+            Vous aviez choisi l&apos;offre {chosen.name}
+          </p>
+          <p className="mt-0.5 text-muted-foreground">
+            Elle est mise en avant ci-dessous. Rien n&apos;est engagé : vous
+            pouvez encore en prendre une autre.
           </p>
         </div>
       )}
@@ -69,6 +88,7 @@ export default async function SubscribePage({
             key={plan.id}
             plan={plan}
             currentPlanSlug={currentPlanSlug}
+            highlighted={plan.slug === chosenSlug}
           />
         ))}
       </div>

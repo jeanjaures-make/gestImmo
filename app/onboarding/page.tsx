@@ -4,17 +4,27 @@ import { Building2 } from "lucide-react";
 import { OnboardingForm } from "@/components/onboarding-form";
 import { Card, CardContent } from "@/components/ui/kit";
 import { getSession } from "@/lib/auth";
+import { safePlanSlug } from "@/lib/plan-choice";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 
 export const metadata = { title: "Votre organisation — CaisseOps" };
 
-export default async function OnboardingPage() {
+export default async function OnboardingPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ plan?: string }>;
+}) {
   if (!isSupabaseConfigured()) redirect("/setup");
 
   const session = await getSession();
   if (session === null) redirect("/login");
   // Déjà rattaché à une organisation : rien à faire ici.
   if (session !== "no-profile") redirect("/dashboard");
+
+  // L'offre choisie avant l'inscription voyage jusqu'ici, pour ramener la
+  // personne au paiement de CE plan une fois son entreprise nommée.
+  const { plan } = await searchParams;
+  const chosen = safePlanSlug(plan);
 
   return (
     <main className="flex min-h-screen items-center justify-center p-6">
@@ -37,7 +47,7 @@ export default async function OnboardingPage() {
               pourrez y inviter des collaborateurs.
             </p>
 
-            <OnboardingForm />
+            <OnboardingForm plan={chosen} />
           </CardContent>
         </Card>
       </div>

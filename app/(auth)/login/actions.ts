@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import { signupMode } from "@/lib/auth-config";
 import { reportError } from "@/lib/observability";
 import { callerKey, rateLimit } from "@/lib/rate-limit";
+import { safePlanSlug, withPlan } from "@/lib/plan-choice";
 import { safeNext } from "@/lib/redirect";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -120,9 +121,14 @@ export async function signUp(
 
   const { email, password } = parsed.data;
 
+  // L'offre choisie avant l'inscription. Elle ne sert qu'à ramener la
+  // personne au paiement de CE plan une fois son entreprise nommée : le
+  // tarif, lui, sera relu dans `plans` par la route de paiement.
+  const plan = safePlanSlug(formData.get("plan"));
+
   return signupMode() === "email-confirmation"
-    ? signUpWithConfirmation(email, password)
-    : signUpInstant(email, password);
+    ? signUpWithConfirmation(email, password, plan)
+    : signUpInstant(email, password, plan);
 }
 
 /**
@@ -137,6 +143,7 @@ export async function signUp(
 async function signUpInstant(
   email: string,
   password: string,
+  plan: string | null,
 ): Promise<AuthState> {
   const admin = createAdminClient();
   if (!admin) {
@@ -187,13 +194,14 @@ async function signUpInstant(
 
   await logAttempt(email, true);
   revalidatePath("/", "layout");
-  redirect("/onboarding");
+  redirect(withPlan("/onboarding", plan));
 }
 
 /** Chemin classique : un lien de confirmation, une session après le clic. */
 async function signUpWithConfirmation(
   email: string,
   password: string,
+  plan: string | null,
 ): Promise<AuthState> {
   const h = await headers();
   const origin = h.get("origin") ?? `https://${h.get("host")}`;
@@ -202,7 +210,11 @@ async function signUpWithConfirmation(
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
-    options: { emailRedirectTo: `${origin}/auth/callback?next=/onboarding` },
+    options: {
+      emailRedirectTo: `${origin}/auth/callback?next=${encodeURIComponent(
+        withPlan("/onboarding", plan),
+      )}`,
+    },
   });
 
   if (error) {
@@ -225,7 +237,7 @@ async function signUpWithConfirmation(
   }
 
   revalidatePath("/", "layout");
-  redirect("/onboarding");
+  redirect(withPlan("/onboarding", plan));
 }
 
 export async function requestPasswordReset(
