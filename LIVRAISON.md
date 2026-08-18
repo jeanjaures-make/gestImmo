@@ -15,12 +15,23 @@ Déclarées sur Vercel dans `Project Settings → Environment Variables`, pour
 |---|---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` | oui | URL du projet. C'est une URL, pas une clé. |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | oui | Clé publique. Soumise au RLS. |
-| `SUPABASE_SERVICE_ROLE_KEY` | oui | Crée les comptes que l'organisation n'ouvre pas elle-même : invitation d'un collaborateur. **Contourne le RLS** : jamais de préfixe `NEXT_PUBLIC_`. |
+| `SUPABASE_SERVICE_ROLE_KEY` | oui | Crée les comptes que l'organisation n'ouvre pas elle-même : celui du souscripteur, une fois son paiement confirmé, et celui d'un collaborateur invité. **Contourne le RLS** : jamais de préfixe `NEXT_PUBLIC_`. |
+| `MONEROO_SECRET_KEY` | oui | Clé **secrète** du tableau de bord Moneroo — jamais la publique. Sans elle, aucun encaissement, donc aucune inscription. Jamais de préfixe `NEXT_PUBLIC_`. |
+| `MONEROO_WEBHOOK_SECRET` | oui | Authentifie les notifications de paiement (HMAC-SHA256 du corps reçu). Absente, le webhook **refuse tout** : un oubli ferme la porte au lieu de l'ouvrir. |
+| `CRON_SECRET` | oui | Authentifie le balayage quotidien des abonnements échus (`vercel.json`). Absente, la route refuse de s'exécuter : rien n'expire jamais, et les intentions d'inscription abandonnées s'accumulent. |
+| `MONEROO_API_URL` | non | Ne sert qu'à viser un autre hôte. L'adresse est la même en test et en production — c'est la **clé** qui choisit l'environnement. |
+| `NEXT_PUBLIC_SITE_URL` | non | URL canonique, si le domaine servi n'est pas celui que Vercel annonce. Sinon déduite de `VERCEL_PROJECT_PRODUCTION_URL`. |
 | `SMTP_PROVIDER_CONFIGURED` | non | `true` une fois un vrai SMTP raccordé. Purement déclaratif : éteint l'avertissement de `/setup`, n'active rien. |
 | `SENTRY_DSN` | non | Prépare le signalement d'erreurs. Absent, l'application fonctionne normalement. |
 
-Sans `SUPABASE_SERVICE_ROLE_KEY`, l'invitation d'un collaborateur reste
-impossible : personne ne peut être ajouté à l'organisation.
+Les quatre premières ne sont pas négociables depuis que l'inscription est
+subordonnée au paiement : sans les clés Moneroo, rien n'est encaissé ni
+confirmé ; sans `SUPABASE_SERVICE_ROLE_KEY`, le paiement confirmé
+n'aboutit à aucun compte. **Aucun client ne peut alors entrer**, et
+l'invitation d'un collaborateur tombe avec.
+
+[`.env.example`](.env.example) porte le détail de chacune, avec l'endroit
+exact où la récupérer.
 
 Le build **n'exige aucune de ces variables** : il aboutit sans elles, et
 l'application dégrade vers l'écran de diagnostic `/setup`. C'est vérifié par
@@ -49,15 +60,13 @@ la CI, qui compile volontairement sans configuration.
 `Authentication → SMTP Settings` : raccorder un fournisseur (Resend,
 Postmark, SendGrid…), puis poser `SMTP_PROVIDER_CONFIGURED=true`.
 
-**La mise en service ne l'exige plus.** Le SMTP intégré de Supabase répond
-`429 — email rate limit exceeded` après une poignée d'envois : sur le
-projet de développement, une fois le quota atteint, plus aucun compte ne
-pouvait être créé ni aucun collaborateur invité. Les deux parcours qui en
-dépendaient ont donc été refaits sans envoi :
+**La mise en service ne l'exige pas.** Le SMTP intégré de Supabase répond
+`429 — email rate limit exceeded` après une poignée d'envois. Trois
+parcours créent un compte sans qu'aucun message ne parte :
 
 | Parcours | Ce qui se passe |
 | --- | --- |
-| Inscription | Le compte est créé et la session ouverte dans la foulée. |
+| Inscription | Le paiement confirmé déclenche `generateLink(type:'invite')` — le compte naît sans mot de passe, et son titulaire en choisit un lui-même sur `/reset-password?bienvenue=1`. Voir `docs/subscriptions.md`. |
 | Invitation d'un collaborateur | L'écran Équipe rend un **lien d'activation** que le gestionnaire transmet par WhatsApp, SMS ou de vive voix. |
 
 Ce n'est pas qu'un contournement : sur le marché visé, WhatsApp atteint un
@@ -69,9 +78,13 @@ son mot de passe doit passer par son gestionnaire, qui lui régénère un lien
 depuis l'écran Équipe. C'est acceptable pour un lancement, pas à
 l'échelle — d'où le raccordement recommandé.
 
-Pour réactiver la confirmation d'e-mail à l'inscription une fois le SMTP en
-place : poser `AUTH_REQUIRE_EMAIL_CONFIRMATION=true`. Aucun code à
-réécrire, voir [`lib/auth-config.ts`](lib/auth-config.ts).
+`lib/auth-config.ts` (`signupMode`, `AUTH_REQUIRE_EMAIL_CONFIRMATION`) et
+les fonctions `signUp`/`signUpInstant`/`signUpWithConfirmation` de
+`app/(auth)/login/actions.ts` datent du parcours antérieur, où
+l'inscription créait le compte directement. Aucune route ne les appelle
+plus depuis que l'inscription passe par le paiement confirmé — laissés en
+place plutôt que supprimés dans le cadre de ce changement, en attendant une
+décision délibérée de les retirer.
 
 ### Suivi d'erreurs — une variable suffit
 
@@ -108,10 +121,41 @@ l'ordre de tabulation et l'usage réel au lecteur d'écran.
 
 ## 3. Migrations SQL
 
-Un seul fichier, rejouable : [`supabase/schema.sql`](supabase/schema.sql).
+Deux fichiers, rejouables, dans cet ordre :
+[`supabase/schema.sql`](supabase/schema.sql) puis
+[`supabase/subscriptions.sql`](supabase/subscriptions.sql) (plans,
+abonnements, paiements, inscription subordonnée au paiement).
+
+L'ordre n'est pas indicatif : `subscriptions.sql` s'interrompt d'emblée,
+avec un message qui nomme la base et le rôle atteints, si `schema.sql`
+n'a pas été joué sur celle-ci. L'éditeur SQL de Supabase joue un collage
+en **une seule transaction** — un échec annule tout, y compris ce qui
+semblait avoir abouti avant, ce qui rend trompeur tout diagnostic tiré de
+l'endroit où l'erreur s'affiche.
 
 [`supabase/reset.sql`](supabase/reset.sql) est **destructif** et n'a de sens
 que pour repartir d'une base vide.
+
+### À rejouer sans attendre — inscription subordonnée au paiement
+
+`supabase/subscriptions.sql` porte désormais la table `signup_intents` et
+les fonctions `confirm_signup_payment`, `provision_signup_intent`,
+`fail_signup_intent`, `claim_signup_intent`, `signup_intent_status`. Sans
+elles, `/signup` reste accessible mais **aucun compte ne peut plus
+naître** : la route qui l'amorce échoue proprement (message à l'écran),
+mais rien n'aboutit tant que le script n'est pas rejoué. Voir
+`docs/subscriptions.md`.
+
+Vérifiable en une commande :
+
+```
+npm run check:db
+```
+
+La section « INSCRIPTION SUBORDONNÉE AU PAIEMENT » doit être entièrement
+verte. `npm run verify:rls` en apporte la preuve fonctionnelle — paiement
+pending/failed/cancelled sans compte, double webhook sans doublon, montant
+forgé refusé avant même d'être écrit.
 
 ### À rejouer sans attendre — correctif de sécurité
 
@@ -166,9 +210,13 @@ Puis, sur le déploiement lui-même :
 - [ ] `/setup` — tout au vert et « Version du schéma : à jour ». « Envoi des
       e-mails » reste en avertissement tant que `SMTP_PROVIDER_CONFIGURED`
       n'est pas posé : c'est attendu, rien n'est bloqué.
-- [ ] Créer un compte sur `/signup` : l'onboarding s'ouvre immédiatement,
-      sans passer par une boîte mail.
-- [ ] Renseigner l'en-tête imprimé (raison sociale, activités, coordonnées).
+- [ ] Choisir une offre sur `/offres`, s'inscrire sur `/signup` (adresse et
+      nom d'entreprise), régler chez Moneroo avec un moyen de test. Vérifier
+      qu'aucun tableau de bord n'est accessible avant la confirmation, puis
+      que le lien de retour ouvre bien l'écran « Bienvenue », sans boîte
+      mail.
+- [ ] Renseigner l'en-tête imprimé (raison sociale, activités, coordonnées)
+      depuis les Réglages.
 - [ ] Émettre un reçu : vérifier le numéro `REC-AAAA-0001`, le montant en
       toutes lettres, et l'aperçu d'impression qui reproduit l'en-tête.
 - [ ] Émettre un bon de caisse (entrée, puis sortie) et un bon de sortie :
@@ -191,8 +239,11 @@ Puis, sur le déploiement lui-même :
 
 État des lieux honnête plutôt que checklist entièrement cochée.
 
-- **Pas de facturation de l'abonnement** : la page de tarifs affiche un
-  prix, mais rien ne le perçoit. L'inscription est libre et gratuite.
+- **La première facture seulement.** L'inscription exige désormais un
+  paiement confirmé par Moneroo — aucun compte ne se crée avant, voir
+  `docs/subscriptions.md`. Il manque encore un écran d'historique des
+  règlements et une facture téléchargeable pour un client qui en
+  redemande une plus tard.
 - **Pas de portail tiers** : CaisseOps est l'outil de l'entreprise, pas un
   portail pour des clients ou des chauffeurs. Les pièces s'impriment et se
   remettent en main propre.

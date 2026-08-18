@@ -50,7 +50,7 @@ const admin = createClient(URL, env.SUPABASE_SERVICE_ROLE_KEY, {
 
 const PWD = "Verif-" + Math.random().toString(36).slice(2) + "-Aa1!";
 const stamp = Date.now();
-const created = { users: [], orgs: [], transactions: [] };
+const created = { users: [], orgs: [], transactions: [], intents: [] };
 let failures = 0;
 
 /** Une assertion : le message décrit ce qui DOIT être vrai. */
@@ -145,6 +145,15 @@ async function cleanup() {
   if (created.transactions.length) {
     await admin.from("payment_events")
       .delete().in("transaction_id", created.transactions);
+  }
+  // Une intention non provisionnée (pending/failed/cancelled) ne se
+  // rattache à aucune organisation : son paiement non plus. Les deux se
+  // nettoient donc par l'identifiant de l'intention, avant la boucle par
+  // organisation ci-dessous — laquelle couvre les intentions qui, elles,
+  // ont bien abouti à une organisation créée.
+  if (created.intents.length) {
+    await admin.from("payments").delete().in("intent_id", created.intents);
+    await admin.from("signup_intents").delete().in("id", created.intents);
   }
   for (const orgId of created.orgs) {
     for (const table of CLEANUP_ORDER) {
@@ -564,7 +573,260 @@ try {
     }
   }
 
-  console.log("\nRECHERCHE GLOBALE");
+  console.log("\nINSCRIPTION SUBORDONNÉE AU PAIEMENT");
+  /**
+   * Jusqu'ici, l'organisation et le compte Supabase Auth naissaient à
+   * l'inscription — avant tout paiement. Cette section prouve l'inverse :
+   * AUCUNE ligne dans `organizations` ou `profiles`, et AUCUNE session,
+   * n'existe tant que le webhook Moneroo n'a pas confirmé l'encaissement.
+   *
+   * `generateLink({type:'invite'|'recovery'})` est appelé pour de vrai :
+   * c'est une opération Supabase Auth pure, qui ne contacte jamais
+   * Moneroo. Rien ici n'ouvre de transaction réelle chez le fournisseur.
+   */
+  async function rpc(name, args) {
+    const { data, error } = await admin.rpc(name, args);
+    if (error) return { error };
+    return { data: Array.isArray(data) ? data[0] : data };
+  }
+
+  async function findUserByEmail(email) {
+    const { data } = await admin.auth.admin.listUsers({ perPage: 200 });
+    return data.users.find((u) => u.email?.toLowerCase() === email.toLowerCase());
+  }
+
+  const { data: starterPlan, error: starterErr } = await admin
+    .from("plans").select("id, price, duration_days").eq("slug", "starter").single();
+  if (starterErr || !starterPlan) {
+    fail(`plan starter introuvable : ${starterErr?.message ?? "?"}`);
+  } else {
+    /** Ouvre une intention + son paiement 'pending', comme le fait /signup. */
+    async function openIntent(tag) {
+      const email = `verif-signup-${tag}-${stamp}@example.invalid`;
+      const { data: intent, error: intentErr } = await admin
+        .from("signup_intents")
+        .insert({ email, org_name: `Inscription ${tag} ${stamp}`, plan_id: starterPlan.id })
+        .select("id").single();
+      if (intentErr) throw new Error(`ouverture d'intention ${tag} : ${intentErr.message}`);
+      created.intents.push(intent.id);
+
+      const tx = `VERIF-SIGNUP-${tag}-${stamp}`;
+      created.transactions.push(tx);
+      const { error: payErr } = await admin.from("payments").insert({
+        intent_id: intent.id, organization_id: null, plan_id: starterPlan.id,
+        transaction_id: tx, amount: starterPlan.price, currency: "XOF", status: "pending",
+      });
+      if (payErr) throw new Error(`paiement d'intention ${tag} : ${payErr.message}`);
+
+      return { email, intentId: intent.id, tx };
+    }
+
+    // ── pending → aucun compte ────────────────────────────────────────
+    const pend = await openIntent("pending");
+    check(
+      !(await findUserByEmail(pend.email)),
+      "une intention 'pending' ne crée aucun compte Supabase Auth",
+    );
+    const { data: pendProfile } = await admin.from("profiles").select("id").eq("email", pend.email).maybeSingle();
+    check(!pendProfile, "une intention 'pending' ne crée aucun profil");
+
+    // ── retour manuel sur /payment/success → aucun accès ───────────────
+    // Réclamer une intention qui n'est pas encore 'active' n'ouvre rien.
+    const earlyClaim = await rpc("claim_signup_intent", { p_intent_id: pend.intentId });
+    check(
+      earlyClaim.data?.claimed === false,
+      "réclamer une intention non payée n'ouvre aucune session",
+      JSON.stringify(earlyClaim.data ?? earlyClaim.error),
+    );
+
+    // ── failed → aucun compte ───────────────────────────────────────────
+    await admin.rpc("fail_signup_intent", { p_transaction_id: pend.tx, p_status: "failed" });
+    const { data: afterFail } = await admin.from("signup_intents").select("status").eq("id", pend.intentId).single();
+    check(afterFail?.status === "failed", "un paiement refusé fait passer l'intention à 'failed'", afterFail?.status);
+    check(!(await findUserByEmail(pend.email)), "une intention 'failed' n'a créé aucun compte");
+
+    // ── cancelled → aucun compte ────────────────────────────────────────
+    const canc = await openIntent("cancelled");
+    await admin.rpc("fail_signup_intent", { p_transaction_id: canc.tx, p_status: "cancelled" });
+    const { data: afterCancel } = await admin.from("signup_intents").select("status").eq("id", canc.intentId).single();
+    check(afterCancel?.status === "cancelled", "une annulation fait passer l'intention à 'cancelled'", afterCancel?.status);
+    check(!(await findUserByEmail(canc.email)), "une intention 'cancelled' n'a créé aucun compte");
+
+    // ── montant falsifié → refusé avant même d'être écrit ──────────────
+    // Aucune policy n'autorise quiconque hors service_role à écrire dans
+    // `payments` : un montant forgé ne peut donc jamais s'y inscrire, pas
+    // même le temps d'être détecté puis corrigé.
+    {
+      const anon = createClient(URL, ANON, { auth: { persistSession: false, autoRefreshToken: false } });
+      const { error: forgedErr } = await anon.from("payments").insert({
+        intent_id: pend.intentId, plan_id: starterPlan.id,
+        transaction_id: `FORGE-${stamp}`, amount: 1, currency: "XOF", status: "pending",
+      });
+      check(
+        Boolean(forgedErr),
+        "un montant forgé ne peut pas être écrit par un client anonyme",
+        "l'insertion a été acceptée",
+      );
+    }
+
+    // ── paid → compte créé, abonnement actif, quotas appliqués ─────────
+    const paid = await openIntent("paid");
+    const confirmed = await rpc("confirm_signup_payment", { p_transaction_id: paid.tx, p_method: "success" });
+    check(confirmed.data?.outcome === "confirmed", "un paiement confirmé fait passer l'intention à 'paid'", JSON.stringify(confirmed.data ?? confirmed.error));
+
+    const { data: invited, error: inviteErr } = await admin.auth.admin.generateLink({
+      type: "invite", email: paid.email,
+    });
+    if (inviteErr || !invited?.user) {
+      fail(`generateLink invite : ${inviteErr?.message ?? "utilisateur absent"}`);
+    } else {
+      created.users.push(invited.user.id);
+
+      const provisioned = await rpc("provision_signup_intent", {
+        p_intent_id: paid.intentId, p_user_id: invited.user.id,
+      });
+      check(provisioned.data?.outcome === "provisioned", "le paiement confirmé provisionne le compte", JSON.stringify(provisioned.data ?? provisioned.error));
+
+      const orgId = provisioned.data?.organization_id;
+      if (orgId) created.orgs.push(orgId);
+
+      const { data: newProfile } = await admin.from("profiles")
+        .select("id, organization_id, role, email").eq("id", invited.user.id).maybeSingle();
+      check(
+        newProfile?.organization_id === orgId && newProfile?.role === "owner" && newProfile?.email === paid.email,
+        "le profil créé est propriétaire de la nouvelle organisation",
+        JSON.stringify(newProfile),
+      );
+
+      const { data: newSub } = await admin.from("subscriptions")
+        .select("status, plan_id, expires_at").eq("organization_id", orgId).maybeSingle();
+      check(
+        newSub?.status === "active" && newSub?.plan_id === starterPlan.id,
+        "l'abonnement créé est actif, sur le plan payé",
+        JSON.stringify(newSub),
+      );
+
+      const { data: linkedPayment } = await admin.from("payments")
+        .select("organization_id").eq("transaction_id", paid.tx).single();
+      check(
+        linkedPayment?.organization_id === orgId,
+        "le tout premier paiement est rattaché a posteriori à l'organisation",
+        linkedPayment?.organization_id,
+      );
+
+      // Abonnement actif → accès autorisé. Le mot de passe se pose par le
+      // chemin RÉEL, et non par un raccourci d'administration : le compte
+      // né de `generateLink(invite)` a son adresse NON confirmée, et seul
+      // le passage par `/auth/callback` la confirme. Le poser directement
+      // laissait un compte incapable de se connecter — le raccourci
+      // prouvait donc autre chose que ce qu'il prétendait prouver.
+      const { data: recovery, error: recErr } = await admin.auth.admin.generateLink({
+        type: "recovery", email: paid.email,
+      });
+      if (recErr || !recovery?.properties?.hashed_token) {
+        fail(`lien de réclamation : ${recErr?.message ?? "jeton absent"}`);
+      } else {
+        const owner = createClient(URL, ANON, { auth: { persistSession: false, autoRefreshToken: false } });
+
+        // Ce que fait `/auth/callback` : vérifier le jeton haché côté
+        // serveur. La session s'ouvre, et l'adresse est confirmée du
+        // même geste.
+        const { data: opened, error: otpErr } = await owner.auth.verifyOtp({
+          type: "recovery", token_hash: recovery.properties.hashed_token,
+        });
+        check(Boolean(opened?.session), "le lien de réclamation ouvre une session", otpErr?.message);
+        check(
+          Boolean(opened?.user?.email_confirmed_at),
+          "l'ouverture de session confirme l'adresse, en attente depuis l'invitation",
+          opened?.user?.email_confirmed_at ?? "NULL",
+        );
+
+        // Ce que fait `/reset-password?bienvenue=1`, sur cette session.
+        const { error: pwdErr } = await owner.auth.updateUser({ password: PWD });
+        check(!pwdErr, "le mot de passe se choisit sur la session ainsi ouverte", pwdErr?.message);
+
+        const { error: emitErr } = await owner.from("receipts").insert({
+          organization_id: orgId, issued_on: "2026-01-20",
+          payer: "Client Test", amount: 15000,
+        });
+        check(!emitErr, "abonnement actif : le propriétaire fraîchement activé peut émettre une pièce", emitErr?.message);
+
+        // Et ce mot de passe vaut ensuite pour une connexion ordinaire,
+        // depuis un client qui n'a jamais vu le lien de réclamation.
+        const later = createClient(URL, ANON, { auth: { persistSession: false, autoRefreshToken: false } });
+        const { error: signInErr } = await later.auth.signInWithPassword({ email: paid.email, password: PWD });
+        check(!signInErr, "le mot de passe posé après activation permet de se connecter", signInErr?.message);
+      }
+
+      // ── réclamation : une seule session par intention ─────────────────
+      const firstClaim = await rpc("claim_signup_intent", { p_intent_id: paid.intentId });
+      check(firstClaim.data?.claimed === true, "la première réclamation d'une intention active réussit", JSON.stringify(firstClaim.data));
+      const secondClaim = await rpc("claim_signup_intent", { p_intent_id: paid.intentId });
+      check(secondClaim.data?.claimed === false, "une seconde réclamation de la même intention échoue", JSON.stringify(secondClaim.data));
+
+      // ── webhook rejoué → aucun doublon ─────────────────────────────────
+      const replay = await rpc("confirm_signup_payment", { p_transaction_id: paid.tx, p_method: "success" });
+      check(replay.data?.outcome === "already_active", "rejouer la confirmation ne recrée rien", JSON.stringify(replay.data));
+      const replayProvision = await rpc("provision_signup_intent", {
+        p_intent_id: paid.intentId, p_user_id: invited.user.id,
+      });
+      check(
+        replayProvision.data?.outcome === "already_active" && replayProvision.data?.organization_id === orgId,
+        "rejouer le provisionnement rend la même organisation, n'en crée pas de seconde",
+        JSON.stringify(replayProvision.data),
+      );
+      const { count: orgCount } = await admin.from("organizations")
+        .select("id", { count: "exact", head: true }).eq("id", orgId);
+      check(orgCount === 1, "une seule organisation existe pour cette inscription", orgCount);
+    }
+
+    // ── double webhook simultané → un seul compte ──────────────────────
+    const race = await openIntent("race");
+    const [r1, r2] = await Promise.all([
+      rpc("confirm_signup_payment", { p_transaction_id: race.tx, p_method: "success" }),
+      rpc("confirm_signup_payment", { p_transaction_id: race.tx, p_method: "success" }),
+    ]);
+    const outcomes = [r1.data?.outcome, r2.data?.outcome].sort();
+    check(
+      outcomes[0] === "already_paid" && outcomes[1] === "confirmed",
+      "deux confirmations simultanées : une seule obtient 'confirmed'",
+      JSON.stringify(outcomes),
+    );
+
+    const { data: raceInvited, error: raceInviteErr } = await admin.auth.admin.generateLink({
+      type: "invite", email: race.email,
+    });
+    if (raceInviteErr || !raceInvited?.user) {
+      fail(`generateLink invite (course) : ${raceInviteErr?.message ?? "utilisateur absent"}`);
+    } else {
+      created.users.push(raceInvited.user.id);
+
+      const [p1, p2] = await Promise.all([
+        rpc("provision_signup_intent", { p_intent_id: race.intentId, p_user_id: raceInvited.user.id }),
+        rpc("provision_signup_intent", { p_intent_id: race.intentId, p_user_id: raceInvited.user.id }),
+      ]);
+      const provisionOutcomes = [p1.data?.outcome, p2.data?.outcome].sort();
+      check(
+        provisionOutcomes[0] === "already_active" && provisionOutcomes[1] === "provisioned",
+        "deux provisionnements simultanés : un seul crée l'organisation",
+        JSON.stringify(provisionOutcomes),
+      );
+      const raceOrgId = (p1.data?.organization_id) ?? (p2.data?.organization_id);
+      if (raceOrgId) created.orgs.push(raceOrgId);
+      check(
+        p1.data?.organization_id === p2.data?.organization_id,
+        "les deux appels concurrents rendent la même organisation",
+        `${p1.data?.organization_id} / ${p2.data?.organization_id}`,
+      );
+
+      const { count: raceOrgCount } = await admin.from("organizations")
+        .select("id", { count: "exact", head: true })
+        .eq("name", `Inscription race ${stamp}`);
+      check(raceOrgCount === 1, "la course entre deux webhooks n'a produit qu'une seule organisation", raceOrgCount);
+    }
+  }
+
+console.log("\nRECHERCHE GLOBALE");
   // La fonction n'est pas SECURITY DEFINER : le RLS s'y applique. Une
   // recherche qui remonterait la pièce d'un autre serait une fuite.
   const { data: hits, error: searchErr } = await b.client

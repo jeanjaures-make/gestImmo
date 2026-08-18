@@ -1,30 +1,32 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { AlertTriangle, MailCheck, PencilLine, ShieldCheck } from "lucide-react";
+import { CreditCard, PencilLine, ShieldCheck } from "lucide-react";
 
-import { AuthForm, EmailField, PasswordField } from "@/components/auth-form";
-import { Card, CardContent } from "@/components/ui/kit";
-import { signupMode, signupNeedsAttention } from "@/lib/auth-config";
+import { AuthForm, EmailField } from "@/components/auth-form";
+import { Card, CardContent, Field, Input } from "@/components/ui/kit";
 import { formatCurrency } from "@/lib/money";
 import { safePlanSlug } from "@/lib/plan-choice";
 import { getActivePlans } from "@/lib/subscriptions";
-import { signUp } from "../login/actions";
+import { startSignup } from "./actions";
 
 export const metadata = { title: "Créer votre compte — CaisseOps" };
 
 /**
- * Inscription, une fois l'offre choisie.
+ * Amorce d'inscription, une fois l'offre choisie.
  *
- * ─── Pourquoi l'offre d'abord ───────────────────────────────────────────
- * Arriver ici sans avoir choisi renvoie vers `/offres`. L'ordre inverse —
- * créer un compte, nommer son entreprise, puis découvrir le tarif —
- * demande tout l'effort avant d'annoncer le prix. Mieux vaut poser la
- * question qui engage pendant qu'elle ne coûte encore rien.
+ * ─── Pourquoi pas de mot de passe ici ────────────────────────────────────
+ * Ce formulaire ne crée aucun compte : il ouvre une INTENTION, puis un
+ * paiement chez Moneroo. Le compte Supabase Auth ne naît qu'à la
+ * confirmation du webhook — un événement serveur qui ne connaît rien du
+ * navigateur qui a payé. Demander un mot de passe maintenant obligerait à
+ * le conserver quelque part en attendant, ce que rien n'oblige à risquer.
+ * Il se choisit APRÈS paiement, sur `/reset-password?bienvenue=1` — le
+ * même écran que celui d'un collaborateur invité.
  *
- * Le slug reçu ne sert qu'à afficher et à suivre le fil. Le montant, lui,
- * sera relu dans `plans` au moment de créer le paiement : un `?plan=`
- * trafiqué ne peut désigner qu'une autre offre publique, jamais un tarif
- * inventé.
+ * ─── Pourquoi l'offre d'abord ────────────────────────────────────────────
+ * Arriver ici sans avoir choisi renvoie vers `/offres`. Le slug reçu ne
+ * sert qu'à afficher et à suivre le fil ; le montant, lui, est relu dans
+ * `plans` par `startSignup`, jamais transmis par ce formulaire.
  */
 export default async function SignUpPage({
   searchParams,
@@ -37,12 +39,9 @@ export default async function SignUpPage({
   if (!slug) redirect("/offres");
 
   // Un slug inconnu — offre retirée de la vente, lien ancien — ramène au
-  // choix plutôt que d'inscrire quelqu'un vers un plan qui n'existe plus.
+  // choix plutôt que d'amorcer une inscription vers un plan qui n'existe plus.
   const chosen = (await getActivePlans()).find((p) => p.slug === slug);
   if (!chosen) redirect("/offres");
-
-  const mode = signupMode();
-  const misconfigured = signupNeedsAttention();
 
   return (
     <Card>
@@ -51,8 +50,8 @@ export default async function SignUpPage({
           Créer votre compte
         </h1>
         <p className="mb-5 text-sm text-muted-foreground">
-          Deux minutes. Vous nommerez votre entreprise à l&apos;étape
-          suivante, et ne réglerez qu&apos;ensuite.
+          Votre espace s&apos;ouvre dès que le paiement est confirmé. Vous
+          choisirez votre mot de passe à ce moment-là.
         </p>
 
         {/* L'offre retenue, rappelée et modifiable : on ne fait pas payer
@@ -75,37 +74,31 @@ export default async function SignUpPage({
           </Link>
         </div>
 
-        {misconfigured && (
-          // Défaut d'exploitation, pas d'usage : la clé d'administration
-          // manque alors que la confirmation par e-mail n'est pas demandée.
-          // Le dire ici évite qu'un visiteur bute sur un message technique.
-          <p className="mb-5 flex items-start gap-2 rounded-lg bg-warning/10 p-3 text-sm text-warning">
-            <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-            L&apos;inscription est momentanément indisponible. Écrivez-nous à
-            contact@caisseops.com, nous ouvrons votre accès.
-          </p>
-        )}
-
-        <AuthForm action={signUp} submitLabel="Créer mon compte">
+        <AuthForm action={startSignup} submitLabel="Passer au paiement">
           <input type="hidden" name="plan" value={chosen.slug} />
           <EmailField autoFocus />
-          <PasswordField autoComplete="new-password" showRules />
+          <Field label="Nom de votre entreprise">
+            <Input
+              name="org_name"
+              autoComplete="organization"
+              required
+              maxLength={120}
+              placeholder="Awa Diallo Négoce"
+              className="h-11"
+            />
+          </Field>
         </AuthForm>
 
         <p className="mt-5 flex items-start gap-2 text-xs text-muted-foreground">
-          {mode === "instant" ? (
-            <>
-              <ShieldCheck className="mt-0.5 size-3.5 shrink-0" />
-              Votre espace s&apos;ouvre immédiatement : aucun e-mail de
-              confirmation à attendre.
-            </>
-          ) : (
-            <>
-              <MailCheck className="mt-0.5 size-3.5 shrink-0" />
-              Un lien de confirmation vous sera envoyé pour activer votre
-              compte.
-            </>
-          )}
+          <CreditCard className="mt-0.5 size-3.5 shrink-0" />
+          Vous serez redirigé vers Moneroo pour régler {formatCurrency(chosen.price)}.
+          Aucune donnée bancaire ne transite par CaisseOps.
+        </p>
+
+        <p className="mt-2 flex items-start gap-2 text-xs text-muted-foreground">
+          <ShieldCheck className="mt-0.5 size-3.5 shrink-0" />
+          Votre espace ne s&apos;active qu&apos;une fois le paiement confirmé
+          par Moneroo — jamais avant.
         </p>
 
         <p className="mt-6 text-center text-sm text-muted-foreground">

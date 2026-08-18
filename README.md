@@ -38,8 +38,11 @@ Supabase (PostgreSQL, Auth) · Zod · Recharts.
    du schéma) et vous dit ce qui manque. L'application n'affiche jamais une
    500 pour un défaut de configuration.
 
-5. Créer un compte sur `/signup`, puis nommer son organisation et renseigner
-   son en-tête imprimé (raison sociale, activités, coordonnées).
+5. Choisir une offre sur `/offres`, s'inscrire sur `/signup` (adresse et nom
+   d'entreprise seulement), régler chez Moneroo. Le compte n'existe qu'une
+   fois le paiement confirmé — voir `docs/subscriptions.md`. L'en-tête
+   imprimé (raison sociale, activités, coordonnées) se renseigne ensuite
+   depuis les Réglages.
 
 6. Émettre un reçu, un bon de caisse ou un bon de sortie depuis le tableau de
    bord. L'impression reproduit votre en-tête.
@@ -126,8 +129,9 @@ indépendants garantissent l'étanchéité :
 ## En-tête imprimé
 
 L'en-tête (raison sociale, forme juridique, activités, téléphone, adresse,
-logo) appartient à l'organisation et se renseigne une fois, à l'onboarding.
-Chaque entreprise imprime ses pièces sous son propre en-tête ; les gabarits
+logo) appartient à l'organisation et se renseigne depuis les Réglages, une
+fois le compte activé. Chaque entreprise imprime ses pièces sous son
+propre en-tête ; les gabarits
 reproduisent le papier à en-tête — cadre BPF du reçu, tableau encadré du bon
 de sortie — et l'aperçu est identique à l'imprimé.
 
@@ -229,10 +233,10 @@ contre la surface sombre — ce n'est pas une inversion automatique.
 
 ## Limites connues
 
-- **Aucune facturation de l'abonnement** : la page de tarifs affiche un
-  prix, mais rien ne le perçoit. L'inscription est libre et gratuite. Une
-  facturation manuelle convient à un lancement restreint ; au-delà, il
-  faudra un mécanisme.
+- **La première facture seulement.** L'inscription exige désormais un
+  paiement confirmé — voir `docs/subscriptions.md` — mais il n'existe pas
+  encore d'écran listant l'historique des règlements ni de génération de
+  facture téléchargeable pour un client qui en redemande une plus tard.
 - **Documents légaux à l'état de projet** : le fond est rédigé et décrit
   fidèlement le traitement des données, mais l'identité de l'éditeur reste
   à compléter et l'ensemble doit être relu par un conseil. Les pages le

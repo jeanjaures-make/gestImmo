@@ -13,6 +13,40 @@
 -- =====================================================================
 
 -- ---------------------------------------------------------------------
+-- GARDE-FOU — ce script suppose `schema.sql` déjà joué sur CETTE base.
+--
+-- Sans lui, la première référence à `organizations` échoue sur un
+-- « 42P01 : la relation organizations n'existe pas » qui ne dit ni
+-- pourquoi, ni sur quelle base, ni avec quel search_path. L'éditeur SQL
+-- de Supabase joue le collage en UNE transaction : l'échec annule tout,
+-- y compris ce qui semblait avoir réussi avant.
+--
+-- Causes déjà rencontrées : une branche de base sélectionnée dans le
+-- tableau de bord (copie fraîche, sans schema.sql), un autre projet que
+-- celui de l'application, ou un `search_path` sans `public`.
+-- ---------------------------------------------------------------------
+DO $$ BEGIN
+  IF to_regclass('public.organizations') IS NULL THEN
+    RAISE EXCEPTION
+      'supabase/schema.sql n''a pas été joué sur cette base : la table « organizations » est absente. Jouez-le d''abord, puis relancez ce script. Base = %, rôle = %, search_path = %, tables publiques = %',
+      current_database(),
+      current_user,
+      current_setting('search_path'),
+      (SELECT count(*) FROM pg_tables WHERE schemaname = 'public');
+  END IF;
+
+  -- `organizations` existe, mais ce script la nomme sans schéma —
+  -- comme tout le reste du fichier. Si `public` manque au search_path
+  -- de la session, la résolution échoue quand même, et l'erreur brute
+  -- accuse la table plutôt que le réglage.
+  IF to_regclass('organizations') IS NULL THEN
+    RAISE EXCEPTION
+      '« public » est absent du search_path de cette session : la table « organizations » existe mais reste introuvable sans schéma. Lancez d''abord SET search_path = public; dans le même onglet, puis relancez ce script. search_path = %',
+      current_setting('search_path');
+  END IF;
+END $$;
+
+-- ---------------------------------------------------------------------
 -- ENUMS
 -- ---------------------------------------------------------------------
 DO $$ BEGIN
@@ -324,66 +358,6 @@ CREATE TRIGGER payments_touch BEFORE UPDATE ON payments
   FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
 
 -- =====================================================================
--- BALAYAGE — remet les statuts en accord avec l'horloge.
---
--- Aucune lecture de l'application ne dépend de cette fonction : partout
--- la validité se juge sur `expires_at > NOW()`, jamais sur la colonne
--- `status`. Un abonnement échu cesse donc d'ouvrir des droits à la
--- seconde près, balayage ou pas.
---
--- Ce que la fonction corrige, c'est l'écart entre la base et sa propre
--- description : une ligne « active » dont la date est passée se lit mal,
--- fausse un export, et induit en erreur qui inspecte la table.
---
--- Elle abandonne aussi les tentatives de paiement restées en plan. Un
--- clic sur « Commencer » suivi d'une fermeture d'onglet laisse un
--- abonnement `pending` et un paiement `pending` que rien ne viendra
--- jamais confirmer : au bout de 24 heures, la fenêtre de paiement de
--- paiement du fournisseur est close, la tentative est perdue pour de bon.
---
--- SECURITY DEFINER, sans droit d'exécution pour `authenticated` : seule
--- la clé de service peut l'appeler.
--- =====================================================================
-CREATE OR REPLACE FUNCTION sweep_subscriptions()
-RETURNS TABLE (expired INT, abandoned INT)
-LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = public AS $$
-DECLARE
-  v_expired   INT;
-  v_abandoned INT;
-BEGIN
-  WITH done AS (
-    UPDATE subscriptions
-       SET status = 'expired'
-     WHERE status = 'active'
-       AND expires_at IS NOT NULL
-       AND expires_at <= NOW()
-    RETURNING 1
-  )
-  SELECT COUNT(*)::INT INTO v_expired FROM done;
-
-  -- Le paiement suit l'abonnement : laisser l'un « en attente » quand
-  -- l'autre est abandonné rendrait le journal incohérent.
-  UPDATE payments
-     SET status = 'expired'
-   WHERE status = 'pending'
-     AND created_at < NOW() - INTERVAL '24 hours';
-
-  WITH done AS (
-    UPDATE subscriptions
-       SET status = 'cancelled', cancelled_at = NOW()
-     WHERE status = 'pending'
-       AND created_at < NOW() - INTERVAL '24 hours'
-    RETURNING 1
-  )
-  SELECT COUNT(*)::INT INTO v_abandoned FROM done;
-
-  RETURN QUERY SELECT v_expired, v_abandoned;
-END;
-$$;
-
-REVOKE EXECUTE ON FUNCTION sweep_subscriptions() FROM anon, authenticated;
-
--- =====================================================================
 -- CONFIRMATION D'UN PAIEMENT — le seul chemin qui active un abonnement.
 --
 -- ─── Pourquoi en SQL et non dans la route ──────────────────────────────
@@ -520,3 +494,436 @@ END;
 $$;
 
 REVOKE EXECUTE ON FUNCTION fail_payment(TEXT, payment_status) FROM anon, authenticated;
+
+-- =====================================================================
+-- INSCRIPTION SUBORDONNÉE AU PAIEMENT
+--
+-- Jusqu'ici, l'organisation et le compte Supabase Auth naissaient à
+-- l'inscription — avant tout paiement. Un visiteur obtenait donc un
+-- compte pleinement utilisable (tableau de bord, réglages, équipe) sans
+-- avoir jamais payé ; seule l'émission de pièces restait bloquée par le
+-- quota. C'est un compte gratuit déguisé en essai bloqué.
+--
+-- Principe : AUCUNE ligne dans `organizations` ou `profiles` n'existe
+-- avant que Moneroo ait confirmé l'encaissement. Ce que l'inscription
+-- produit avant paiement, c'est une INTENTION — une simple déclaration
+-- d'intérêt, sans le moindre pouvoir d'accès.
+--
+-- ─── Pourquoi aucun mot de passe n'est jamais stocké ────────────────────
+-- Le compte réel ne peut naître qu'à la confirmation du webhook — un
+-- événement serveur, asynchrone, qui ne connaît rien du navigateur qui a
+-- payé. Demander un mot de passe AVANT paiement obligerait à le
+-- conserver quelque part en attendant : chiffré ou non, c'est un risque
+-- que rien n'oblige à prendre. La solution déjà en place ailleurs dans ce
+-- schéma — l'invitation d'un collaborateur — s'y prête exactement :
+-- `generateLink(type:'invite')` crée le compte SANS mot de passe, et la
+-- personne en choisit un après coup, sur un écran qu'elle atteint via un
+-- lien à usage unique. Le paiement confirmé ouvre ce même chemin.
+-- =====================================================================
+
+DO $$ BEGIN
+  CREATE TYPE signup_intent_status AS ENUM
+    ('pending', 'paid', 'active', 'failed', 'cancelled', 'expired');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE TABLE IF NOT EXISTS signup_intents (
+  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  email           TEXT NOT NULL,
+  org_name        TEXT NOT NULL,
+  plan_id         UUID NOT NULL REFERENCES plans(id),
+  status          signup_intent_status NOT NULL DEFAULT 'pending',
+  -- Posés uniquement une fois le compte réellement provisionné.
+  user_id         UUID,
+  organization_id UUID REFERENCES organizations(id),
+  -- Verrou à usage unique : la session ne s'ouvre qu'une fois par
+  -- intention, même si le lien de retour est ouvert deux fois (onglet
+  -- dupliqué, bouton Précédent, historique du navigateur).
+  claimed_at      TIMESTAMPTZ,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Une seule intention ouverte par adresse : sans cette contrainte, deux
+-- inscriptions concurrentes pour le même e-mail atteindraient toutes deux
+-- le paiement, et la seconde à confirmer se heurterait à un compte
+-- Supabase Auth déjà créé par la première — silencieusement, côté webhook.
+CREATE UNIQUE INDEX IF NOT EXISTS signup_intents_open_email_idx
+  ON signup_intents (lower(email))
+  WHERE status IN ('pending', 'paid');
+
+CREATE INDEX IF NOT EXISTS signup_intents_created_idx
+  ON signup_intents (created_at);
+
+ALTER TABLE signup_intents ENABLE ROW LEVEL SECURITY;
+-- Aucune policy : avant paiement, personne n'a de session pour en
+-- réclamer une — et après, la lecture passe par `/api/signup/status`
+-- (client admin, réponse réduite à un statut). Même posture que
+-- `payment_events` : une table que seul le service_role touche.
+
+DROP TRIGGER IF EXISTS signup_intents_touch ON signup_intents;
+CREATE TRIGGER signup_intents_touch BEFORE UPDATE ON signup_intents
+  FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+
+-- ---------------------------------------------------------------------
+-- PAYMENTS — une transaction peut désormais précéder l'organisation.
+--
+-- `organization_id` n'est plus NOT NULL : à la création d'une intention,
+-- aucune organisation n'existe. `intent_id` porte le lien ; il reste NULL
+-- pour tout paiement du flux existant (changement de plan par un
+-- propriétaire déjà connecté), qui continue de fonctionner sans aucune
+-- modification.
+-- ---------------------------------------------------------------------
+ALTER TABLE payments ALTER COLUMN organization_id DROP NOT NULL;
+ALTER TABLE payments
+  ADD COLUMN IF NOT EXISTS intent_id UUID REFERENCES signup_intents(id);
+
+CREATE INDEX IF NOT EXISTS payments_intent_idx ON payments (intent_id);
+
+-- =====================================================================
+-- CONFIRMATION D'UN PAIEMENT D'INSCRIPTION.
+--
+-- Même verrou que `confirm_payment` (`FOR UPDATE`, le temps d'une seule
+-- transaction implicite) : deux notifications Moneroo simultanées pour la
+-- même transaction ne peuvent pas toutes deux obtenir 'confirmed'. Celle
+-- qui perd la course voit le paiement déjà 'paid' et repart sans agir —
+-- c'est ce qui empêche un webhook rejoué de produire un second compte.
+--
+-- Cette fonction ne crée ni compte ni organisation : le SQL ne peut pas
+-- créer un utilisateur Supabase Auth (c'est l'API d'administration, côté
+-- Node, qui s'en charge). Elle se contente de faire passer le PAIEMENT à
+-- 'paid' et l'INTENTION à 'paid', puis rend au serveur ce qu'il faut pour
+-- provisionner le compte à l'étape suivante.
+-- =====================================================================
+CREATE OR REPLACE FUNCTION confirm_signup_payment(
+  p_transaction_id TEXT,
+  p_method         TEXT DEFAULT NULL
+)
+RETURNS TABLE (
+  outcome         TEXT,   -- unknown | already_active | already_paid | confirmed
+  intent_id       UUID,
+  email           TEXT,
+  org_name        TEXT,
+  plan_id         UUID,
+  organization_id UUID
+)
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_payment RECORD;
+  v_intent  RECORD;
+BEGIN
+  SELECT p.* INTO v_payment
+  FROM payments p
+  WHERE p.transaction_id = p_transaction_id
+  FOR UPDATE;
+
+  IF NOT FOUND OR v_payment.intent_id IS NULL THEN
+    -- `intent_id IS NULL` : ce n'est pas un paiement d'inscription — le
+    -- webhook doit continuer sur le chemin `confirm_payment` existant.
+    RETURN QUERY SELECT 'unknown'::TEXT, NULL::UUID, NULL::TEXT,
+      NULL::TEXT, NULL::UUID, NULL::UUID;
+    RETURN;
+  END IF;
+
+  SELECT * INTO v_intent FROM signup_intents WHERE id = v_payment.intent_id
+  FOR UPDATE;
+
+  IF v_intent.status = 'active' THEN
+    RETURN QUERY SELECT 'already_active'::TEXT, v_intent.id, v_intent.email,
+      v_intent.org_name, v_intent.plan_id, v_intent.organization_id;
+    RETURN;
+  END IF;
+
+  IF v_payment.status = 'paid' THEN
+    -- Payé, mais le provisionnement n'a pas (encore) fini — crash entre
+    -- les deux étapes Node, ou une autre livraison est en train de le
+    -- faire. Le serveur retente le provisionnement ; c'est sans risque,
+    -- `provision_signup_intent` vérifie lui aussi son propre statut.
+    RETURN QUERY SELECT 'already_paid'::TEXT, v_intent.id, v_intent.email,
+      v_intent.org_name, v_intent.plan_id, v_intent.organization_id;
+    RETURN;
+  END IF;
+
+  UPDATE payments SET status = 'paid', paid_at = NOW(),
+         payment_method = COALESCE(p_method, payment_method)
+   WHERE id = v_payment.id;
+
+  UPDATE signup_intents SET status = 'paid' WHERE id = v_intent.id;
+
+  RETURN QUERY SELECT 'confirmed'::TEXT, v_intent.id, v_intent.email,
+    v_intent.org_name, v_intent.plan_id, NULL::UUID;
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION confirm_signup_payment(TEXT, TEXT) FROM anon, authenticated;
+
+-- =====================================================================
+-- PROVISIONNEMENT — organisation, profil propriétaire, abonnement actif.
+--
+-- Appelée par le serveur juste après avoir obtenu `p_user_id` via
+-- `admin.auth.admin.generateLink({type:'invite'})` — c'est ce seul appel,
+-- côté Node, qui crée le compte Supabase Auth ; cette fonction fait tout
+-- le reste dans UNE transaction, pour qu'il n'existe jamais d'état
+-- intermédiaire où l'un existerait sans l'autre.
+--
+-- Verrouille l'intention à son tour : si deux livraisons du webhook ont
+-- chacune obtenu 'confirmed' puis 'already_paid' (fenêtre théorique,
+-- fermée en pratique par le verrou de `confirm_signup_payment`), seule
+-- la première ici fait le travail ; la seconde trouve `status <> 'paid'`
+-- et ne recrée rien.
+-- =====================================================================
+CREATE OR REPLACE FUNCTION provision_signup_intent(
+  p_intent_id UUID,
+  p_user_id   UUID
+)
+RETURNS TABLE (
+  outcome         TEXT,  -- provisioned | already_active | not_paid
+  organization_id UUID,
+  expires_at      TIMESTAMPTZ
+)
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_intent   RECORD;
+  v_org_id   UUID;
+  v_duration INT;
+  v_expires  TIMESTAMPTZ;
+  v_base     TEXT;
+  v_slug     TEXT;
+  v_suffix   INT := 0;
+BEGIN
+  SELECT * INTO v_intent FROM signup_intents WHERE id = p_intent_id FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RETURN QUERY SELECT 'not_paid'::TEXT, NULL::UUID, NULL::TIMESTAMPTZ;
+    RETURN;
+  END IF;
+
+  IF v_intent.status = 'active' THEN
+    RETURN QUERY SELECT 'already_active'::TEXT, v_intent.organization_id, NULL::TIMESTAMPTZ;
+    RETURN;
+  END IF;
+
+  IF v_intent.status <> 'paid' THEN
+    RETURN QUERY SELECT 'not_paid'::TEXT, NULL::UUID, NULL::TIMESTAMPTZ;
+    RETURN;
+  END IF;
+
+  -- Même génération de slug que `create_organization`.
+  v_base := trim(BOTH '-' FROM regexp_replace(lower(v_intent.org_name), '[^a-z0-9]+', '-', 'g'));
+  IF v_base = '' THEN v_base := 'organisation'; END IF;
+  v_slug := v_base;
+  WHILE EXISTS (SELECT 1 FROM organizations WHERE slug = v_slug) LOOP
+    v_suffix := v_suffix + 1;
+    v_slug := v_base || '-' || v_suffix;
+  END LOOP;
+
+  INSERT INTO organizations (name, slug) VALUES (v_intent.org_name, v_slug)
+  RETURNING id INTO v_org_id;
+
+  INSERT INTO profiles (id, organization_id, firstname, lastname, email, role)
+  VALUES (p_user_id, v_org_id, '', '', v_intent.email, 'owner');
+
+  SELECT duration_days INTO v_duration FROM plans WHERE id = v_intent.plan_id;
+  v_duration := COALESCE(v_duration, 30);
+  v_expires := NOW() + (v_duration || ' days')::INTERVAL;
+
+  INSERT INTO subscriptions (organization_id, plan_id, status, started_at, expires_at)
+  VALUES (v_org_id, v_intent.plan_id, 'active', NOW(), v_expires);
+
+  -- Le tout premier paiement de l'organisation lui est rattaché a
+  -- posteriori : sans organisation à sa création, il n'avait pu l'être
+  -- avant. Les renouvellements suivants, eux, en portent une dès le départ.
+  UPDATE payments SET organization_id = v_org_id WHERE intent_id = p_intent_id;
+
+  UPDATE signup_intents
+     SET status = 'active', user_id = p_user_id, organization_id = v_org_id
+   WHERE id = p_intent_id;
+
+  RETURN QUERY SELECT 'provisioned'::TEXT, v_org_id, v_expires;
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION provision_signup_intent(UUID, UUID) FROM anon, authenticated;
+
+-- =====================================================================
+-- ÉCHEC D'UN PAIEMENT D'INSCRIPTION — refus, annulation.
+--
+-- Ne régresse jamais une intention déjà 'active' : une notification
+-- d'échec arrivant en retard, après qu'une autre déjà réussie a fait
+-- naître le compte, ne doit pas le remettre en cause.
+-- =====================================================================
+CREATE OR REPLACE FUNCTION fail_signup_intent(
+  p_transaction_id TEXT,
+  p_status         payment_status DEFAULT 'failed'
+)
+RETURNS VOID
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_intent_id UUID;
+BEGIN
+  UPDATE payments
+     SET status = p_status
+   WHERE transaction_id = p_transaction_id
+     AND status = 'pending'
+  RETURNING intent_id INTO v_intent_id;
+
+  IF v_intent_id IS NOT NULL THEN
+    -- Le CASE doit être casté explicitement. Sans cela PostgreSQL rend
+    -- du TEXT, refuse de l'affecter à une colonne ENUM, et fait échouer
+    -- la fonction ENTIÈRE — l'écriture du paiement comprise, puisque
+    -- tout se joue dans une seule transaction. Un paiement refusé
+    -- restait alors « en attente » des deux côtés, et le balayage
+    -- quotidien tombait avec, lui qui appelle cette même fonction.
+    UPDATE signup_intents
+       SET status = (CASE p_status
+                       WHEN 'cancelled' THEN 'cancelled'
+                       WHEN 'expired'   THEN 'expired'
+                       ELSE 'failed'
+                     END)::signup_intent_status
+     WHERE id = v_intent_id
+       AND status NOT IN ('active');
+  END IF;
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION fail_signup_intent(TEXT, payment_status) FROM anon, authenticated;
+
+-- =====================================================================
+-- CLAIM — ouvre la session, une seule fois par intention.
+--
+-- `claimed_at` est posé de façon atomique par l'UPDATE lui-même (clause
+-- WHERE incluse) : deux requêtes de réclamation simultanées pour la même
+-- intention ne peuvent pas toutes deux réussir. La première gagne, pose
+-- le verrou ; la seconde ne touche aucune ligne et repart bredouille.
+-- =====================================================================
+CREATE OR REPLACE FUNCTION claim_signup_intent(p_intent_id UUID)
+RETURNS TABLE (claimed BOOLEAN, email TEXT)
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_email TEXT;
+BEGIN
+  UPDATE signup_intents
+     SET claimed_at = NOW()
+   WHERE id = p_intent_id
+     AND status = 'active'
+     AND claimed_at IS NULL
+  RETURNING signup_intents.email INTO v_email;
+
+  IF v_email IS NULL THEN
+    RETURN QUERY SELECT false, NULL::TEXT;
+  ELSE
+    RETURN QUERY SELECT true, v_email;
+  END IF;
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION claim_signup_intent(UUID) FROM anon, authenticated;
+
+-- =====================================================================
+-- STATUT PUBLIC D'UNE INTENTION — lu par /api/signup/status.
+--
+-- Ne rend qu'un statut : ni l'e-mail, ni le nom de l'entreprise, ni aucun
+-- identifiant. La page qui l'interroge n'a pas de session ; le `ref` de
+-- l'URL est la seule chose qui la relie à sa propre inscription, et il ne
+-- doit pas suffire à apprendre quoi que ce soit sur celle d'un autre.
+-- =====================================================================
+CREATE OR REPLACE FUNCTION signup_intent_status(p_intent_id UUID)
+RETURNS TEXT
+LANGUAGE SQL STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT status::TEXT FROM signup_intents WHERE id = p_intent_id;
+$$;
+
+REVOKE EXECUTE ON FUNCTION signup_intent_status(UUID) FROM anon, authenticated;
+
+-- =====================================================================
+-- BALAYAGE — remet les statuts en accord avec l'horloge.
+--
+-- Aucune lecture de l'application ne dépend de cette fonction : partout
+-- la validité se juge sur `expires_at > NOW()`, jamais sur la colonne
+-- `status`. Un abonnement échu cesse donc d'ouvrir des droits à la
+-- seconde près, balayage ou pas.
+--
+-- Ce que la fonction corrige, c'est l'écart entre la base et sa propre
+-- description : une ligne « active » dont la date est passée se lit mal,
+-- fausse un export, et induit en erreur qui inspecte la table.
+--
+-- Elle abandonne aussi les tentatives de paiement restées en plan. Un
+-- clic sur « Commencer » suivi d'une fermeture d'onglet laisse un
+-- abonnement `pending` et un paiement `pending` que rien ne viendra
+-- jamais confirmer : au bout de 24 heures, la fenêtre de paiement de
+-- paiement du fournisseur est close, la tentative est perdue pour de bon.
+--
+-- SECURITY DEFINER, sans droit d'exécution pour `authenticated` : seule
+-- la clé de service peut l'appeler.
+--
+-- ─── Les intentions d'inscription abandonnées ──────────────────────────
+-- Même délai (24 h) et même geste : une intention jamais payée, ou payée
+-- puis jamais provisionnée (crash entre les deux étapes), passe à
+-- `expired` plutôt que de rester indéfiniment `pending`/`paid`. Le
+-- paiement associé suit, via `fail_signup_intent`.
+--
+-- ─── DROP, et une seule définition ─────────────────────────────────────
+-- La fonction rend une colonne de plus qu'avant. `CREATE OR REPLACE` ne
+-- sait pas changer un type de retour : il faut DROP d'abord. Et cette
+-- définition doit rester la SEULE du fichier — en écrire une seconde,
+-- plus haut, rendait le script non rejouable : au second passage, elle
+-- tentait de ramener la fonction à son ancienne forme, et PostgreSQL
+-- refusait (42P13), annulant tout le reste avec elle.
+-- =====================================================================
+DROP FUNCTION IF EXISTS sweep_subscriptions();
+
+CREATE FUNCTION sweep_subscriptions()
+RETURNS TABLE (expired INT, abandoned INT, expired_intents INT)
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_expired   INT;
+  v_abandoned INT;
+  v_intents   INT;
+  v_tx        TEXT;
+BEGIN
+  WITH done AS (
+    UPDATE subscriptions
+       SET status = 'expired'
+     WHERE status = 'active'
+       AND expires_at IS NOT NULL
+       AND expires_at <= NOW()
+    RETURNING 1
+  )
+  SELECT COUNT(*)::INT INTO v_expired FROM done;
+
+  UPDATE payments
+     SET status = 'expired'
+   WHERE status = 'pending'
+     AND intent_id IS NULL
+     AND created_at < NOW() - INTERVAL '24 hours';
+
+  WITH done AS (
+    UPDATE subscriptions
+       SET status = 'cancelled', cancelled_at = NOW()
+     WHERE status = 'pending'
+       AND created_at < NOW() - INTERVAL '24 hours'
+    RETURNING 1
+  )
+  SELECT COUNT(*)::INT INTO v_abandoned FROM done;
+
+  v_intents := 0;
+  FOR v_tx IN
+    SELECT p.transaction_id
+    FROM signup_intents si
+    JOIN payments p ON p.intent_id = si.id
+    WHERE si.status IN ('pending', 'paid')
+      AND si.created_at < NOW() - INTERVAL '24 hours'
+  LOOP
+    PERFORM fail_signup_intent(v_tx, 'expired');
+    v_intents := v_intents + 1;
+  END LOOP;
+
+  UPDATE signup_intents
+     SET status = 'expired'
+   WHERE status IN ('pending', 'paid')
+     AND created_at < NOW() - INTERVAL '24 hours';
+
+  RETURN QUERY SELECT v_expired, v_abandoned, v_intents;
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION sweep_subscriptions() FROM anon, authenticated;

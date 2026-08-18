@@ -162,6 +162,23 @@ export const organizationSchema = z.object({
 });
 
 /**
+ * Amorce d'inscription — avant tout paiement.
+ *
+ * Volontairement minimal, et volontairement SANS mot de passe : le compte
+ * ne naît qu'à la confirmation du paiement, par un mécanisme qui n'en a
+ * jamais besoin (`generateLink`). Le reste — forme juridique, coordonnées,
+ * logo — se complète depuis les Réglages une fois le compte actif.
+ */
+export const signupIntentSchema = z.object({
+  email: z.email({ message: "Adresse e-mail invalide." }),
+  org_name: text(2, 120, "Le nom de l'entreprise"),
+  plan: z
+    .string()
+    .trim()
+    .regex(/^[a-z0-9-]{1,40}$/, { message: "Offre invalide." }),
+});
+
+/**
  * Changement de mot de passe depuis l'application.
  *
  * L'ancien mot de passe est exigé, alors que Supabase ne le réclame pas.

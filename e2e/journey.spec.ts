@@ -3,7 +3,9 @@ import { test, expect, type Page } from "@playwright/test";
 import {
   admin,
   deleteOrganizationsNamed,
+  deleteSignupIntentsMatching,
   deleteUsersMatching,
+  seedActivatedSignup,
   seedSubscription,
   testEmail,
   TEST_PASSWORD,
@@ -33,6 +35,7 @@ const ownerEmail = testEmail("owner");
 
 test.afterAll(async () => {
   await deleteOrganizationsNamed(PREFIX);
+  await deleteSignupIntentsMatching("e2e-");
   await deleteUsersMatching("e2e-");
 });
 
@@ -66,68 +69,68 @@ test("de l'inscription à l'export comptable du premier carnet", async ({
   await expect(shown(page, "3 000 F CFA")).toBeVisible();
   await page.getByRole("link", { name: "Choisir Starter" }).click();
 
-  // ------------------------------------------------------- 2. Inscription
-  // Par le formulaire public, exactement comme un client. Aucun e-mail
-  // n'intervient : le mode « instant » crée le compte confirmé côté
-  // serveur et ouvre la session dans la foulée.
+  // --------------------------------------------- 2. Amorce d'inscription
+  // Le formulaire public, tel qu'un client le remplit. On s'arrête au
+  // bord du clic : le soumettre ouvrirait une VRAIE transaction chez
+  // Moneroo, ce qu'aucun test automatisé ne doit jamais faire. La preuve
+  // que le paiement confirmé active bien le compte est apportée ailleurs,
+  // sans réseau, par `npm run verify:rls` (section « INSCRIPTION
+  // SUBORDONNÉE AU PAIEMENT ») et par `signup-gate.spec.ts` — ce dernier
+  // exerçant même le lien de retour dans un vrai navigateur, jusqu'au
+  // choix du mot de passe.
   await page.waitForURL(
     (url) =>
       url.pathname === "/signup" && url.searchParams.get("plan") === "starter",
   );
-  // L'offre retenue reste sous les yeux pendant la saisie.
   await expect(shown(page, /Offre choisie/)).toBeVisible();
+  await expect(page.getByLabel("Adresse e-mail")).toBeVisible();
+  await expect(page.getByLabel("Nom de votre entreprise")).toBeVisible();
+  // Le point qui compte : aucun mot de passe ne se saisit ici. Il ne se
+  // choisira qu'après confirmation du paiement.
+  await expect(page.getByLabel(/mot de passe/i)).toHaveCount(0);
+
+  // ------------------------------------------------- 3. Paiement confirmé
+  // Ce que le webhook Moneroo aurait produit : organisation, profil
+  // propriétaire, abonnement actif — sans jamais appeler Moneroo. Voir
+  // `seedActivatedSignup`, qui rejoue la suite RÉELLE des opérations
+  // (`confirm_signup_payment`, `generateLink`, `provision_signup_intent`).
+  const seeded = await seedActivatedSignup(ownerEmail, orgName, "starter");
+
+  // Le mot de passe, lui, se choisit après coup — jamais avant. On le
+  // pose ici comme le ferait `/reset-password?bienvenue=1`, dont le
+  // parcours complet (lien de réclamation → choix du mot de passe) est
+  // éprouvé séparément par `signup-gate.spec.ts`.
+  await admin().auth.admin.updateUserById(seeded.userId, {
+    password: TEST_PASSWORD,
+    email_confirm: true,
+  });
+
+  await page.goto("/login");
   await page.getByLabel("Adresse e-mail").fill(ownerEmail);
   await page.getByLabel("Mot de passe").fill(TEST_PASSWORD);
-  await page.getByRole("button", { name: "Créer mon compte" }).click();
-
-  // Le choix survit à l'inscription : il voyage jusqu'à l'onboarding.
-  await page.waitForURL(
-    (url) =>
-      url.pathname === "/onboarding" && url.searchParams.get("plan") === "starter",
-  );
-
-  // ----------------------------------------------------- 3. Organisation
-  // L'en-tête imprimé est demandé dès l'inscription : c'est lui qui fait
-  // que la première pièce ressemble à l'entreprise, pas à un formulaire.
-  // On ne renavigue PAS vers /onboarding : la redirection nous y a déjà
-  // déposés avec le choix d'offre en paramètre, et un `goto` nu le
-  // perdrait — le formulaire retomberait alors vers le tableau de bord.
-  await page.getByLabel("Nom de l'organisation").fill(orgName);
-  await page.getByLabel("Prénom", { exact: true }).fill("Awa");
-  await page.getByLabel("Nom", { exact: true }).fill("Diallo");
-  await page.getByLabel("Forme juridique").fill("S.A.R.L.");
-  await page.getByLabel("Téléphone").fill("+225 27 21 00 00 00");
-  await page.getByLabel("Adresse", { exact: true }).fill("Zone industrielle, lot 12");
-  await page.getByRole("button", { name: "Ouvrir mon espace" }).click();
-
-  // Une offre ayant été choisie, on est ramené au paiement de CELLE-CI
-  // plutôt qu'au tableau de bord : sans abonnement, aucune pièce ne peut
-  // être émise, et rien sur le tableau de bord ne l'expliquerait.
-  await page.waitForURL(
-    (url) =>
-      url.pathname === "/subscribe" && url.searchParams.get("plan") === "starter",
-  );
-  await expect(shown(page, /Vous aviez choisi l'offre Starter/)).toBeVisible();
-
-  await page.goto("/dashboard");
+  await page.getByRole("button", { name: "Se connecter" }).click();
+  await page.waitForURL("**/dashboard");
   await expect(
     page.getByRole("heading", { name: "Vue d'ensemble" }),
   ).toBeVisible();
 
-  // L'en-tête saisi doit être là : sans lui, les pièces impriment un nom
-  // nu alors que l'utilisateur a fourni plus.
   const { data: org } = await admin()
     .from("organizations")
-    .select("id, legal_form, phone, address")
-    .eq("name", orgName)
+    .select("id, name")
+    .eq("id", seeded.organizationId)
     .single();
-  expect(org?.legal_form).toBe("S.A.R.L.");
-  expect(org?.phone).toBe("+225 27 21 00 00 00");
+  expect(org?.name).toBe(orgName);
 
-  // Abonnement Business : sans abonnement actif, `checkDocumentQuota`
-  // bloque l'émission de pièces. On l'active ici via l'API admin — c'est
-  // le chemin que suit le webhook Moneroo après vérification, pas un
-  // parcours client. Le test éprouve l'émission, pas le paiement.
+  // L'en-tête imprimé (forme juridique, coordonnées) se complète depuis
+  // les Réglages, une fois le compte actif — l'inscription, elle, ne
+  // demande désormais que l'essentiel. Ce même écran, y compris son champ
+  // « Raison sociale », est exercé plus bas (étape Réglages).
+
+  // Abonnement Business : la suite du parcours (journal d'audit compris)
+  // veut une offre au-dessus de Starter, choisie à l'écran. On l'ACTIVE
+  // ici via l'API admin — c'est le chemin que suit le webhook Moneroo
+  // après vérification, pas un parcours client. Le test éprouve
+  // l'émission, pas le paiement lui-même.
   await seedSubscription(org!.id, "business");
 
   // ------------------------------------------------------------ 3. Reçu

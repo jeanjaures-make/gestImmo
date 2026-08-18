@@ -26,7 +26,7 @@ export async function buildActivationLink(
   type: ActivationType,
 ): Promise<string> {
   const h = await headers();
-  const origin = h.get("origin") ?? `https://${h.get("host")}`;
+  const origin = h.get("origin") ?? `${scheme(h)}://${h.get("host")}`;
 
   const params = new URLSearchParams({
     token_hash: tokenHash,
@@ -37,4 +37,30 @@ export async function buildActivationLink(
   });
 
   return `${origin}/auth/callback?${params}`;
+}
+
+/**
+ * Schéma à employer quand l'en-tête `Origin` fait défaut.
+ *
+ * Il fait défaut plus souvent qu'il n'y paraît : un navigateur ne l'envoie
+ * pas sur une navigation GET de premier niveau. L'invitation d'un
+ * collaborateur ne s'en apercevait pas — elle part d'une Server Action,
+ * donc d'un POST, qui en porte un. Le retour de paiement, lui, arrive par
+ * un simple clic : sans repli correct, le lien fabriqué pointait vers
+ * `https://localhost:3000` et le navigateur échouait sur une erreur TLS.
+ *
+ * `x-forwarded-proto` est posé par tout hébergeur qui termine le TLS,
+ * Vercel compris. À défaut, seule une adresse locale peut légitimement
+ * être servie en clair — partout ailleurs, HTTPS est la bonne réponse.
+ */
+function scheme(h: Headers): string {
+  const forwarded = h.get("x-forwarded-proto")?.split(",")[0]?.trim();
+  if (forwarded) return forwarded;
+
+  const host = (h.get("host") ?? "").toLowerCase();
+  const local = ["localhost", "127.0.0.1", "[::1]"].some(
+    (name) => host === name || host.startsWith(`${name}:`),
+  );
+
+  return local ? "http" : "https";
 }

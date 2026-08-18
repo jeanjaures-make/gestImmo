@@ -197,7 +197,10 @@ export type Subscription = {
 
 export type Payment = {
   id: string;
-  organization_id: string;
+  // Nul tant qu'aucune organisation n'existe : c'est le cas de la toute
+  // première transaction d'une inscription, avant confirmation. Il se
+  // remplit au provisionnement — voir `provision_signup_intent`.
+  organization_id: string | null;
   user_id: string | null;
   subscription_id: string | null;
   plan_id: string;
@@ -209,6 +212,35 @@ export type Payment = {
   status: PaymentStatus;
   paid_at: string | null;
   metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
+// --------------------------------------------- inscription et paiement
+/**
+ * Une intention de souscription, avant tout paiement confirmé.
+ *
+ * Ne porte AUCUN pouvoir d'accès : ni mot de passe, ni session, ni
+ * organisation utilisable. Elle ne devient un compte réel qu'au passage
+ * à `active`, provisionné par le webhook Moneroo — jamais avant.
+ */
+export type SignupIntentStatus =
+  | "pending"
+  | "paid"
+  | "active"
+  | "failed"
+  | "cancelled"
+  | "expired";
+
+export type SignupIntent = {
+  id: string;
+  email: string;
+  org_name: string;
+  plan_id: string;
+  status: SignupIntentStatus;
+  user_id: string | null;
+  organization_id: string | null;
+  claimed_at: string | null;
   created_at: string;
   updated_at: string;
 };

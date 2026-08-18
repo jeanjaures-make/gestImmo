@@ -30,6 +30,10 @@ const PUBLIC_PATHS = [
   // Le planificateur de Vercel non plus. La route se garde elle-même
   // par `CRON_SECRET` et reste inerte si le secret n'est pas configuré.
   "/api/cron",
+  // Sondage et réclamation d'une inscription : appelés par un visiteur
+  // qui, par construction, n'a encore aucune session — c'est justement ce
+  // que ces routes s'apprêtent à lui donner, une fois le paiement confirmé.
+  "/api/signup",
 ];
 
 /** Routes d'entrée dont un utilisateur déjà connecté n'a plus besoin. */

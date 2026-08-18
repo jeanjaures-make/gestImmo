@@ -103,9 +103,61 @@ await columns("subscriptions", [
 await columns("payments", [
   "id", "organization_id", "user_id", "subscription_id", "plan_id",
   "transaction_id", "amount", "currency", "provider", "payment_method",
-  "status", "paid_at", "metadata",
+  "status", "paid_at", "metadata", "intent_id",
 ]);
 await columns("payment_events", ["id", "transaction_id", "event_type", "payload"]);
+
+console.log("\nINSCRIPTION SUBORDONNÉE AU PAIEMENT (signup_intents)");
+await columns("signup_intents", [
+  "id", "email", "org_name", "plan_id", "status",
+  "user_id", "organization_id", "claimed_at",
+]);
+
+await fn(
+  "confirm_signup_payment",
+  { p_transaction_id: "SONDE-INEXISTANTE-000", p_method: null },
+  (d) => `répond « ${d?.[0]?.outcome ?? d?.outcome ?? "?"} » sur une transaction inconnue`,
+);
+await fn(
+  "provision_signup_intent",
+  { p_intent_id: "00000000-0000-0000-0000-000000000000", p_user_id: "00000000-0000-0000-0000-000000000000" },
+  (d) => `répond « ${d?.[0]?.outcome ?? d?.outcome ?? "?"} » sur une intention inconnue`,
+);
+await fn(
+  "fail_signup_intent",
+  { p_transaction_id: "SONDE-INEXISTANTE-000", p_status: "failed" },
+  () => "présente",
+);
+await fn(
+  "claim_signup_intent",
+  { p_intent_id: "00000000-0000-0000-0000-000000000000" },
+  (d) => `répond claimed=${d?.[0]?.claimed ?? d?.claimed ?? "?"} sur une intention inconnue`,
+);
+await fn(
+  "signup_intent_status",
+  { p_intent_id: "00000000-0000-0000-0000-000000000000" },
+  (d) => `répond ${d === null ? "null" : `« ${d} »`} sur une intention inconnue`,
+);
+
+console.log("\nCOLONNE payments.organization_id DÉSORMAIS NULLABLE");
+// Un paiement d'inscription précède l'organisation qu'il finira par
+// financer : sans cette relaxation, la toute première ligne ne pourrait
+// pas s'écrire. La ligne de sonde est supprimée aussitôt.
+{
+  const { data: plan } = await admin.from("plans").select("id").limit(1).maybeSingle();
+  if (!plan) {
+    console.log("  · non vérifiable : aucun plan en base");
+  } else {
+    const sonde = `SONDE-NULLABLE-${Date.now()}`;
+    const { error } = await admin.from("payments").insert({
+      organization_id: null, plan_id: plan.id, transaction_id: sonde,
+      amount: 1, currency: "XOF", status: "pending",
+    });
+    if (error) ko("organization_id nullable", error.message);
+    else ok("un paiement sans organisation s'écrit (inscription en cours)");
+    await admin.from("payments").delete().eq("transaction_id", sonde);
+  }
+}
 
 console.log("\nFONCTIONS DE PAIEMENT");
 await fn(
@@ -120,7 +172,7 @@ await fn(
 );
 await fn("sweep_subscriptions", {}, (d) => {
   const row = Array.isArray(d) ? d[0] : d;
-  return `${row?.expired ?? 0} échu(s), ${row?.abandoned ?? 0} abandonné(s)`;
+  return `${row?.expired ?? 0} échu(s), ${row?.abandoned ?? 0} abandonné(s), ${row?.expired_intents ?? 0} inscription(s) expirée(s)`;
 });
 
 console.log("\nFONCTIONS D'ABONNEMENT ET DE QUOTA");
@@ -158,6 +210,32 @@ console.log("\nCONTRAINTE UNIQUE SUR transaction_id");
       else ko("contrainte UNIQUE", "LE DOUBLON A ÉTÉ ACCEPTÉ");
 
       await admin.from("payments").delete().eq("transaction_id", sonde);
+    }
+  }
+}
+
+console.log("\nCONTRAINTE UNIQUE SUR signup_intents (une adresse, une inscription ouverte)");
+{
+  const { data: plan } = await admin.from("plans").select("id").limit(1).maybeSingle();
+  if (!plan) {
+    console.log("  · non vérifiable : aucun plan en base");
+  } else {
+    const email = `sonde-unique-${Date.now()}@example.invalid`;
+    const { data: premiere, error: premierErr } = await admin
+      .from("signup_intents")
+      .insert({ email, org_name: "Sonde", plan_id: plan.id })
+      .select("id")
+      .single();
+    if (premierErr) {
+      ko("contrainte UNIQUE (signup_intents)", `insertion de sonde impossible : ${premierErr.message}`);
+    } else {
+      const { error: doublon } = await admin
+        .from("signup_intents")
+        .insert({ email, org_name: "Sonde bis", plan_id: plan.id });
+      if (doublon?.code === "23505") ok("une seconde inscription pour la même adresse est refusée (23505)");
+      else if (doublon) ko("contrainte UNIQUE (signup_intents)", `refus attendu 23505, obtenu ${doublon.code}`);
+      else ko("contrainte UNIQUE (signup_intents)", "LE DOUBLON A ÉTÉ ACCEPTÉ");
+      await admin.from("signup_intents").delete().eq("id", premiere.id);
     }
   }
 }
@@ -207,7 +285,7 @@ if (plansError) {
 }
 
 console.log("\nÉTAT DES PAIEMENTS");
-for (const table of ["payments", "subscriptions", "payment_events"]) {
+for (const table of ["payments", "subscriptions", "payment_events", "signup_intents"]) {
   const { count, error } = await admin
     .from(table).select("*", { count: "exact", head: true });
   if (error) ko(`${table}`, error.message);

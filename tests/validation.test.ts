@@ -6,6 +6,7 @@ import {
   formDataToObject,
   readDeliveryLines,
   receiptSchema,
+  signupIntentSchema,
 } from "@/lib/validation";
 
 /**
@@ -190,5 +191,61 @@ describe("bon de sortie", () => {
   it("refuse une quantité sans désignation", () => {
     const parsed = lines([["", "40 sacs", "", ""]]);
     expect(parsed.success).toBe(false);
+  });
+});
+
+describe("amorce d'inscription", () => {
+  /**
+   * Ce schéma n'accepte jamais de mot de passe ni de montant : le compte
+   * naît après paiement, sans mot de passe stocké, et le prix vient
+   * toujours de `plans`. Le vérifier ici, c'est vérifier que personne ne
+   * peut réintroduire ces champs par erreur dans un futur formulaire.
+   */
+  it("accepte une amorce valide", () => {
+    const parsed = signupIntentSchema.safeParse({
+      email: "awa@example.com",
+      org_name: "Awa Diallo Négoce",
+      plan: "starter",
+    });
+    expect(parsed.success).toBe(true);
+  });
+
+  it("refuse une adresse invalide", () => {
+    const parsed = signupIntentSchema.safeParse({
+      email: "pas-une-adresse",
+      org_name: "Awa Diallo Négoce",
+      plan: "starter",
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  it("refuse un nom d'entreprise trop court", () => {
+    const parsed = signupIntentSchema.safeParse({
+      email: "awa@example.com",
+      org_name: "A",
+      plan: "starter",
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  it("refuse un slug d'offre hors forme", () => {
+    for (const plan of ["Starter", "starter plan", "../../etc", "", "a".repeat(41)]) {
+      const parsed = signupIntentSchema.safeParse({
+        email: "awa@example.com",
+        org_name: "Awa Diallo Négoce",
+        plan,
+      });
+      expect(parsed.success, `plan=${JSON.stringify(plan)}`).toBe(false);
+    }
+  });
+
+  it("n'a ni champ mot de passe ni champ montant", () => {
+    // Un test qui échoue silencieusement à décrire une intention plutôt
+    // qu'à la refuser : on vérifie donc la FORME du schéma, pas seulement
+    // son verdict sur un exemple.
+    const shape = Object.keys(signupIntentSchema.shape);
+    expect(shape).not.toContain("password");
+    expect(shape).not.toContain("amount");
+    expect(shape.sort()).toEqual(["email", "org_name", "plan"]);
   });
 });
