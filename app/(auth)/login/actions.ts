@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
+import { reportError } from "@/lib/observability";
 import { callerKey, rateLimit } from "@/lib/rate-limit";
 import { safeNext } from "@/lib/redirect";
 import { createClient } from "@/lib/supabase/server";
@@ -102,9 +103,37 @@ export async function requestPasswordReset(
   const origin = h.get("origin") ?? `https://${h.get("host")}`;
 
   const supabase = await createClient();
-  await supabase.auth.resetPasswordForEmail(parsed.data.email, {
+  const { error } = await supabase.auth.resetPasswordForEmail(parsed.data.email, {
     redirectTo: `${origin}/auth/callback?next=/reset-password`,
   });
+
+  /**
+   * Une erreur ici ne dit RIEN de l'adresse saisie.
+   *
+   * Supabase répond 200 pour une adresse inconnue — c'est ainsi qu'il
+   * empêche l'énumération des comptes. Ce qui remonte est donc toujours
+   * de notre côté : quota d'envoi épuisé, SMTP absent ou en panne. La
+   * remonter ne divulgue rien, et l'avaler trompait tout le monde.
+   *
+   * Car elle ÉTAIT avalée : le résultat n'était pas lu, et l'écran
+   * annonçait « un lien vient d'être envoyé » alors que rien ne partait.
+   * Le SMTP intégré de Supabase plafonne à quelques messages par heure ;
+   * passé ce seuil, la personne réessayait indéfiniment en accusant sa
+   * boîte mail.
+   */
+  if (error) {
+    reportError(error, {
+      scope: "password-reset",
+      extra: { status: error.status ?? null, code: error.code ?? null },
+    });
+
+    const throttled = error.status === 429 || error.code?.includes("rate_limit");
+    return {
+      error: throttled
+        ? "Trop de messages ont été envoyés depuis ce site récemment. Patientez une heure, puis réessayez — ou demandez à un responsable de votre organisation de vous régénérer un lien depuis l'écran Équipe."
+        : "L'envoi du lien a échoué, et cela vient de nous, pas de votre adresse. Réessayez dans quelques minutes ; si cela persiste, demandez un lien depuis l'écran Équipe.",
+    };
+  }
 
   // Réponse identique que l'adresse existe ou non : pas d'énumération.
   return {
