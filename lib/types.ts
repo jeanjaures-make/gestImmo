@@ -12,6 +12,19 @@ export type CashAccount = "personal" | "company";
 /** Les trois pièces émises par le produit. */
 export type DocumentKind = "receipt" | "cash_voucher" | "delivery_note";
 
+// ------------------------------------------------------------ immobilier
+/** Nature d'un bien mis en location. */
+export type PropertyKind =
+  | "appartement" | "villa" | "maison" | "bureau"
+  | "local_commercial" | "immeuble" | "terrain" | "autre";
+/** Un bien est occupé, libre, ou retiré de la location. */
+export type PropertyStatus = "disponible" | "occupe" | "indisponible";
+/** Cycle de vie d'une quittance : brouillon, émise, annulée. */
+export type RentReceiptStatus = "draft" | "issued" | "cancelled";
+/** Comment le loyer a été réglé. */
+export type RentPaymentMethod =
+  | "especes" | "cheque" | "virement" | "depot" | "mobile_money";
+
 // Les valeurs sont en anglais en base (enums PostgreSQL), l'affichage en
 // français : la traduction vit ici et nulle part ailleurs.
 export const ROLE_LABELS: Record<UserRole, string> = {
@@ -52,6 +65,50 @@ export const DOCUMENT_KIND_LABELS: Record<DocumentKind, string> = {
   receipt: "Reçu",
   cash_voucher: "Bon de caisse",
   delivery_note: "Bon de sortie",
+};
+
+export const PROPERTY_KIND_LABELS: Record<PropertyKind, string> = {
+  appartement: "Appartement",
+  villa: "Villa",
+  maison: "Maison",
+  bureau: "Bureau",
+  local_commercial: "Local commercial",
+  immeuble: "Immeuble",
+  terrain: "Terrain",
+  autre: "Autre",
+};
+
+export const PROPERTY_STATUS_LABELS: Record<PropertyStatus, string> = {
+  disponible: "Disponible",
+  occupe: "Occupé",
+  indisponible: "Indisponible",
+};
+
+export const PROPERTY_STATUS_TONES: Record<PropertyStatus, Tone> = {
+  disponible: "success",
+  occupe: "info",
+  indisponible: "warning",
+};
+
+export const RENT_RECEIPT_STATUS_LABELS: Record<RentReceiptStatus, string> = {
+  draft: "Brouillon",
+  issued: "Émise",
+  cancelled: "Annulée",
+};
+
+export const RENT_RECEIPT_STATUS_TONES: Record<RentReceiptStatus, Tone> = {
+  draft: "warning",
+  issued: "success",
+  cancelled: "danger",
+};
+
+/** Les quatre cases du carnet, plus le mobile money. */
+export const RENT_PAYMENT_METHOD_LABELS: Record<RentPaymentMethod, string> = {
+  especes: "Espèces",
+  cheque: "Chèque",
+  virement: "Virement bancaire",
+  depot: "Dépôt sur compte",
+  mobile_money: "Mobile money",
 };
 
 // ---------------------------------------------------------------- rows
@@ -261,6 +318,97 @@ export type ActiveSubscription = {
   has_audit_log: boolean;
   status: SubscriptionStatus;
   expires_at: string | null;
+};
+
+// ------------------------------------------------------ immobilier (rows)
+
+/** Un bien mis en location par l'entreprise. */
+export type Property = {
+  id: string;
+  organization_id: string;
+  /** Référence interne : « APP-A3 », « VILLA-2 ». Unique chez elle seule. */
+  reference: string;
+  name: string;
+  kind: PropertyKind;
+  address: string;
+  description: string;
+  /** Le bailleur, quand l'entreprise gère pour le compte d'un tiers. */
+  owner_name: string;
+  rent_amount: number;
+  charges_amount: number;
+  status: PropertyStatus;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/** Un locataire, et les termes de son bail. */
+export type Tenant = {
+  id: string;
+  organization_id: string;
+  full_name: string;
+  phone: string;
+  email: string | null;
+  address: string;
+  lease_reference: string;
+  /** Nul tant qu'aucun lot n'est affecté, ou après une sortie. */
+  property_id: string | null;
+  /**
+   * Le loyer du BAIL, qui peut différer de celui affiché sur le bien —
+   * remise consentie, ancien bail non réévalué. C'est celui-ci qui
+   * alimente la quittance.
+   */
+  rent_amount: number;
+  charges_amount: number;
+  lease_start: string | null;
+  lease_end: string | null;
+  notes: string;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/**
+ * Une quittance de loyer.
+ *
+ * Les champs recopiés — nom du locataire, adresse du bien — le sont
+ * délibérément : la pièce est remise, et opposable. Renommer le locataire
+ * l'an prochain ne doit pas faire diverger la quittance de janvier de
+ * l'exemplaire qu'il détient. Même raisonnement que le montant en lettres,
+ * stocké et non recalculé à l'affichage.
+ */
+export type RentReceipt = {
+  id: string;
+  organization_id: string;
+  number: string;
+  status: RentReceiptStatus;
+  issued_on: string;
+  property_id: string | null;
+  tenant_id: string | null;
+  tenant_name: string;
+  tenant_phone: string;
+  property_label: string;
+  property_address: string;
+  property_kind: PropertyKind | null;
+  landlord_name: string;
+  manager_name: string;
+  period_start: string;
+  period_end: string;
+  period_label: string;
+  rent_amount: number;
+  charges_amount: number;
+  other_fees: number;
+  total_amount: number;
+  amount_in_words: string;
+  payment_method: RentPaymentMethod;
+  payment_reference: string;
+  paid_on: string | null;
+  notes: string;
+  cancelled_at: string | null;
+  cancel_reason: string;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 // ----------------------------------------------------------- formatters

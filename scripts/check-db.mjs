@@ -356,6 +356,52 @@ if (plansError) {
   }
 }
 
+
+console.log("\nGESTION IMMOBILIÈRE (property.sql)");
+await columns("properties", [
+  "id", "organization_id", "reference", "name", "kind", "address",
+  "owner_name", "rent_amount", "charges_amount", "status",
+]);
+await columns("tenants", [
+  "id", "organization_id", "full_name", "phone", "property_id",
+  "rent_amount", "charges_amount", "lease_start", "lease_end",
+]);
+await columns("rent_receipts", [
+  "id", "organization_id", "number", "status", "issued_on",
+  "tenant_name", "property_label", "property_address",
+  "period_start", "period_end", "total_amount", "amount_in_words",
+  "payment_method", "cancelled_at", "cancel_reason",
+]);
+await columns("rent_receipt_counters", ["organization_id", "year", "last_value"]);
+
+// La numérotation ne se vérifie pas à vide : `next_rent_receipt_number`
+// INCRÉMENTE le compteur. L'appeler ici consommerait un numéro pour de
+// bon — et le premier client de l'année démarrerait à QL-2026-0002 sans
+// que rien ne l'explique. Sa mécanique est éprouvée par `verify:rls`,
+// qui travaille sur une organisation jetable.
+{
+  const anon = createClient(
+    env.NEXT_PUBLIC_SUPABASE_URL,
+    env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    { auth: { persistSession: false, autoRefreshToken: false } },
+  );
+  const { error } = await anon.rpc("next_rent_receipt_number", {
+    p_organization: "00000000-0000-0000-0000-000000000000",
+    p_year: 2026,
+  });
+  const blocked = error && (error.code === "42501" || error.code === "PGRST202");
+  if (blocked) {
+    ok("next_rent_receipt_number() est hors d'atteinte de la clé anonyme");
+  } else {
+    ko(
+      "next_rent_receipt_number() est hors d'atteinte de la clé anonyme",
+      error
+        ? `la fonction s'est exécutée (« ${error.message} ») — property.sql à rejouer`
+        : "un numéro vient d'être consommé sans session — property.sql à rejouer",
+    );
+  }
+}
+
 console.log("\nÉTAT DES PAIEMENTS");
 for (const table of ["payments", "subscriptions", "payment_events", "signup_intents"]) {
   const { count, error } = await admin

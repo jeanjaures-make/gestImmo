@@ -135,6 +135,10 @@ const voucherDraft = (orgId) => ({
  */
 const CLEANUP_ORDER = [
   "delivery_note_lines", "delivery_notes", "cash_vouchers", "receipts",
+  // Immobilier : les quittances renvoient aux locataires et aux biens par
+  // des clés étrangères RESTRICT. Les enfants partent donc en premier,
+  // sans quoi PostgreSQL refuse et le script abandonne ses propres déchets.
+  "rent_receipts", "tenants", "properties", "rent_receipt_counters",
   "document_counters", "audit_logs", "payments", "subscriptions", "profiles",
 ];
 
@@ -937,6 +941,201 @@ try {
         .eq("name", `Inscription race ${stamp}`);
       check(raceOrgCount === 1, "la course entre deux webhooks n'a produit qu'une seule organisation", raceOrgCount);
     }
+  }
+
+
+  console.log("\nGESTION IMMOBILIÈRE");
+  /**
+   * Le module immobilier n'apporte aucun mécanisme de sécurité nouveau :
+   * il repose sur ceux des pièces de caisse. Cette section vérifie qu'il
+   * en hérite réellement — une politique relue n'est pas une politique
+   * testée, et un module ajouté est exactement l'endroit où le
+   * cloisonnement se perce sans qu'on le voie.
+   */
+  {
+    const { data: propA, error: propErr } = await a.client
+      .from("properties")
+      .insert({
+        organization_id: a.orgId,
+        reference: `LOT-${stamp}`,
+        name: "Appartement 3 pièces",
+        kind: "appartement",
+        address: "Koumassi Remblais",
+        rent_amount: 150000,
+        charges_amount: 10000,
+      })
+      .select("*")
+      .single();
+    check(!propErr, "le propriétaire enregistre un bien", propErr?.message);
+
+    // Deux biens ne peuvent pas porter la même référence CHEZ LA MÊME
+    // entreprise — mais rien n'empêche une autre d'employer la sienne.
+    const { error: dupErr } = await a.client.from("properties").insert({
+      organization_id: a.orgId,
+      reference: `LOT-${stamp}`,
+      name: "Doublon",
+    });
+    // Le détail porte le message ET le code : un code seul laisse une
+    // panne réseau — erreur sans code — se confondre avec une contrainte
+    // qui n'aurait pas mordu, et l'on cherche alors du côté du schéma.
+    check(
+      dupErr?.code === "23505",
+      "une référence de bien ne se réutilise pas chez soi",
+      dupErr ? `${dupErr.code ?? "sans code"} : ${dupErr.message}` : "l'insertion a été acceptée",
+    );
+
+    const { error: sameRefElsewhere } = await b.client.from("properties").insert({
+      organization_id: b.orgId,
+      reference: `LOT-${stamp}`,
+      name: "Même référence, autre entreprise",
+    });
+    check(!sameRefElsewhere, "la même référence reste libre chez une autre entreprise", sameRefElsewhere?.message);
+
+    const { data: tenantA, error: tenantErr } = await a.client
+      .from("tenants")
+      .insert({
+        organization_id: a.orgId,
+        full_name: "Konan Yao",
+        phone: "0700000000",
+        property_id: propA?.id,
+        rent_amount: 150000,
+        charges_amount: 10000,
+      })
+      .select("*")
+      .single();
+    check(!tenantErr, "le propriétaire enregistre un locataire", tenantErr?.message);
+
+    // Le statut du bien suit ses locataires : le poser à la main se
+    // serait oublié un jour sur deux, et la liste des biens libres aurait menti.
+    const { data: occupied } = await admin
+      .from("properties").select("status").eq("id", propA?.id).single();
+    check(occupied?.status === "occupe", "un bien devient « occupé » dès qu'un locataire lui est rattaché", occupied?.status);
+
+    // ── Cloisonnement ────────────────────────────────────────────────
+    const { data: seenByB } = await b.client
+      .from("properties").select("id").eq("id", propA?.id);
+    check((seenByB ?? []).length === 0, "properties : B ne voit rien de A");
+
+    const { data: tenantsSeenByB } = await b.client
+      .from("tenants").select("id").eq("id", tenantA?.id);
+    check((tenantsSeenByB ?? []).length === 0, "tenants : B ne voit rien de A");
+
+    // La clé étrangère est COMPOSITE : PostgreSQL refuse structurellement
+    // de rattacher le locataire d'une entreprise au bien d'une autre.
+    const { error: crossErr } = await b.client.from("tenants").insert({
+      organization_id: b.orgId,
+      full_name: "Locataire volé",
+      property_id: propA?.id,
+    });
+    check(Boolean(crossErr), "rattacher un locataire au bien d'une autre entreprise est rejeté", "l'insertion a été acceptée");
+
+    // ── La quittance ─────────────────────────────────────────────────
+    const quittance = {
+      organization_id: a.orgId,
+      tenant_id: tenantA?.id,
+      property_id: propA?.id,
+      tenant_name: "Konan Yao",
+      property_label: `LOT-${stamp} — Appartement 3 pièces`,
+      property_address: "Koumassi Remblais",
+      period_start: "2026-03-01",
+      period_end: "2026-03-31",
+      period_label: "Mars 2026",
+      rent_amount: 150000,
+      charges_amount: 10000,
+      other_fees: 0,
+      total_amount: 160000,
+      amount_in_words: "Cent soixante mille francs CFA",
+      payment_method: "especes",
+    };
+
+    const { data: first, error: qErr } = await a.client
+      .from("rent_receipts").insert(quittance).select("*").single();
+    check(!qErr, "le propriétaire émet une quittance", qErr?.message);
+
+    const year = new Date().getFullYear();
+    check(
+      first?.number === `QL-${year}-0001`,
+      "la première quittance de l'année porte QL-<année>-0001",
+      first?.number,
+    );
+
+    // Un numéro fourni par le client est ignoré : le déclencheur écrase.
+    const { data: forged } = await a.client
+      .from("rent_receipts")
+      .insert({ ...quittance, number: "QL-1999-9999", period_label: "Avril 2026" })
+      .select("number").single();
+    check(forged?.number === `QL-${year}-0002`, "un numéro imposé par le client est ignoré", forged?.number);
+
+    const { data: quittanceSeenByB } = await b.client
+      .from("rent_receipts").select("id").eq("id", first?.id);
+    check((quittanceSeenByB ?? []).length === 0, "rent_receipts : B ne voit rien de A");
+
+    // ── Ce qu'une quittance émise interdit ───────────────────────────
+    const { error: editErr } = await a.client
+      .from("rent_receipts").update({ rent_amount: 1 }).eq("id", first?.id);
+    check(Boolean(editErr), "une quittance émise ne se corrige pas", "la modification a été acceptée");
+
+    const { error: numberErr } = await a.client
+      .from("rent_receipts").update({ number: "QL-2026-0999" }).eq("id", first?.id);
+    check(Boolean(numberErr), "le numéro d'une quittance ne se modifie pas", "la modification a été acceptée");
+
+    const { error: dropErr } = await a.client
+      .from("rent_receipts").delete().eq("id", first?.id);
+    const { count: stillThere } = await admin
+      .from("rent_receipts").select("id", { count: "exact", head: true }).eq("id", first?.id);
+    check(
+      Boolean(dropErr) || stillThere === 1,
+      "une quittance émise ne se supprime pas : elle s'annule",
+      "la ligne a disparu",
+    );
+
+    // ── L'annulation, elle, est le geste prévu ───────────────────────
+    const { error: cancelErr } = await a.client
+      .from("rent_receipts")
+      .update({ status: "cancelled", cancelled_at: new Date().toISOString(), cancel_reason: "Erreur de période" })
+      .eq("id", first?.id);
+    check(!cancelErr, "une quittance émise s'annule", cancelErr?.message);
+
+    const { data: cancelled } = await admin
+      .from("rent_receipts").select("status, cancel_reason").eq("id", first?.id).single();
+    check(
+      cancelled?.status === "cancelled" && cancelled?.cancel_reason === "Erreur de période",
+      "l'annulation conserve la ligne et son motif",
+      JSON.stringify(cancelled),
+    );
+
+    // Le numéro d'une quittance annulée n'est jamais réattribué : la
+    // suite reprend où le compteur s'était arrêté.
+    const { data: third } = await a.client
+      .from("rent_receipts")
+      .insert({ ...quittance, period_label: "Mai 2026" })
+      .select("number").single();
+    check(third?.number === `QL-${year}-0003`, "le numéro d'une quittance annulée n'est pas réattribué", third?.number);
+
+    // ── Rôles ────────────────────────────────────────────────────────
+    // Un lecteur NEUF : celui des sections précédentes a été promu
+    // gestionnaire par l'assertion « un propriétaire promeut toujours un
+    // collaborateur ». S'appuyer sur lui ici testerait un rôle qui n'existe
+    // plus, et le module paraîtrait percé alors que la policy tient.
+    const onlooker = await member("temoin", a.orgId, "viewer");
+    const { error: readerErr } = await onlooker.client.from("properties").insert({
+      organization_id: a.orgId, reference: `LECT-${stamp}`, name: "Refusé",
+    });
+    check(Boolean(readerErr), "le lecteur n'enregistre aucun bien", "l'insertion a été acceptée");
+
+    const { error: cashierErr } = await cashier.client.from("rent_receipts")
+      .insert({ ...quittance, period_label: "Juin 2026" });
+    check(!cashierErr, "le caissier émet une quittance : c'est son métier", cashierErr?.message);
+
+    const { error: cashierDropErr } = await cashier.client
+      .from("properties").delete().eq("id", propA?.id);
+    const { count: propStillThere } = await admin
+      .from("properties").select("id", { count: "exact", head: true }).eq("id", propA?.id);
+    check(
+      Boolean(cashierDropErr) || propStillThere === 1,
+      "le caissier ne supprime pas un bien",
+      "le bien a disparu",
+    );
   }
 
 console.log("\nRECHERCHE GLOBALE");

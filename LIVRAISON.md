@@ -120,17 +120,20 @@ l'ordre de tabulation et l'usage réel au lecteur d'écran.
 
 ## 3. Migrations SQL
 
-Deux fichiers, rejouables, dans cet ordre :
-[`supabase/schema.sql`](supabase/schema.sql) puis
+Trois fichiers, rejouables, dans cet ordre :
+[`supabase/schema.sql`](supabase/schema.sql), puis
 [`supabase/subscriptions.sql`](supabase/subscriptions.sql) (plans,
-abonnements, paiements, inscription subordonnée au paiement).
+abonnements, paiements, inscription subordonnée au paiement), puis
+[`supabase/property.sql`](supabase/property.sql) (biens, locataires,
+quittances de loyer).
 
-L'ordre n'est pas indicatif : `subscriptions.sql` s'interrompt d'emblée,
-avec un message qui nomme la base et le rôle atteints, si `schema.sql`
-n'a pas été joué sur celle-ci. L'éditeur SQL de Supabase joue un collage
-en **une seule transaction** — un échec annule tout, y compris ce qui
-semblait avoir abouti avant, ce qui rend trompeur tout diagnostic tiré de
-l'endroit où l'erreur s'affiche.
+L'ordre n'est pas indicatif : `subscriptions.sql` et `property.sql`
+s'interrompent d'emblée, avec un message qui nomme la base et le rôle
+atteints, si le script dont ils dépendent n'a pas été joué sur celle-ci.
+L'éditeur SQL de Supabase joue un collage en **une seule transaction** —
+un échec annule tout, y compris ce qui semblait avoir abouti avant, ce
+qui rend trompeur tout diagnostic tiré de l'endroit où l'erreur
+s'affiche.
 
 [`supabase/reset.sql`](supabase/reset.sql) est **destructif** et n'a de sens
 que pour repartir d'une base vide.
@@ -155,6 +158,19 @@ La section « INSCRIPTION SUBORDONNÉE AU PAIEMENT » doit être entièrement
 verte. `npm run verify:rls` en apporte la preuve fonctionnelle — paiement
 pending/failed/cancelled sans compte, double webhook sans doublon, montant
 forgé refusé avant même d'être écrit.
+
+### Gestion immobilière
+
+`supabase/property.sql` porte `properties`, `tenants`, `rent_receipts`
+et leur compteur de numérotation. Sans lui, les écrans Biens, Locataires
+et Quittances répondent une erreur de table absente ; le reste du produit
+est intact.
+
+`npm run check:db` le vérifie — section « GESTION IMMOBILIÈRE
+(property.sql) » — et `npm run verify:rls` en apporte la preuve
+fonctionnelle : cloisonnement entre organisations, numérotation sous
+verrou, quittance émise incorrigible, annulation conservée. Voir
+[`docs/immobilier.md`](docs/immobilier.md).
 
 ### À rejouer sans attendre — la dernière porte gratuite
 

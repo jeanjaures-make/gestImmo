@@ -6,9 +6,12 @@ import { usePathname } from "next/navigation";
 import {
   Building2,
   CreditCard,
+  Home,
+  KeyRound,
   LayoutDashboard,
   PackageOpen,
   ReceiptText,
+  Users,
   ScrollText,
   Settings,
   UserCog,
@@ -33,6 +36,12 @@ const NAV: NavItem[] = [
   { href: "/receipts", label: "Reçus", icon: ReceiptText },
   { href: "/cash-vouchers", label: "Bons de caisse", icon: Wallet },
   { href: "/delivery-notes", label: "Bons de sortie", icon: PackageOpen },
+  // Gestion immobilière. Trois entrées plates plutôt qu'un groupe
+  // repliable : la barre n'en connaît pas, et lui en ajouter un
+  // toucherait un composant que tous les écrans partagent.
+  { href: "/properties", label: "Biens", icon: Home },
+  { href: "/tenants", label: "Locataires", icon: Users },
+  { href: "/rent-receipts", label: "Quittances", icon: KeyRound },
   {
     href: "/audit",
     label: "Journal d'audit",

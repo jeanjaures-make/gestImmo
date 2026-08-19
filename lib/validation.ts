@@ -318,6 +318,148 @@ export function readDeliveryLines(formData: FormData) {
   }).safeParse(rows);
 }
 
+// ------------------------------------------------------------ immobilier
+
+/**
+ * Date facultative.
+ *
+ * Une date de fin de bail vide vaut « bail sans terme convenu », pas
+ * « 1970 ». La chaîne vide devient donc `null` plutôt que d'être refusée
+ * par le format ISO.
+ */
+const optionalIsoDate = z.preprocess(
+  blankIfMissing,
+  z
+    .string()
+    .trim()
+    .transform((v) => (v === "" ? null : v))
+    .pipe(
+      z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/, { message: "Date invalide." })
+        .nullable(),
+    ),
+);
+
+/** Identifiant facultatif : « aucun bien affecté » est un état normal. */
+const optionalUuid = z.preprocess(
+  blankIfMissing,
+  z
+    .string()
+    .trim()
+    .transform((v) => (v === "" ? null : v))
+    .pipe(z.uuid({ message: "Référence invalide." }).nullable()),
+);
+
+export const propertySchema = z.object({
+  reference: text(1, 40, "La référence du bien"),
+  name: text(1, 160, "Le nom du bien"),
+  kind: z
+    .enum([
+      "appartement",
+      "villa",
+      "maison",
+      "bureau",
+      "local_commercial",
+      "immeuble",
+      "terrain",
+      "autre",
+    ])
+    .default("appartement"),
+  address: plainText(240),
+  description: plainText(500),
+  owner_name: plainText(160),
+  rent_amount: defaultedMoney,
+  charges_amount: defaultedMoney,
+  // `status` n'est pas saisissable : un déclencheur le tient à jour selon
+  // qu'un locataire est rattaché ou non. Le proposer au formulaire
+  // inviterait à contredire la base, qui reprendrait la main au prochain
+  // mouvement de bail.
+});
+
+export const tenantSchema = z.object({
+  full_name: text(1, 160, "Le nom du locataire"),
+  phone: plainText(60),
+  email: optionalEmail,
+  address: plainText(240),
+  lease_reference: plainText(60),
+  property_id: optionalUuid,
+  rent_amount: defaultedMoney,
+  charges_amount: defaultedMoney,
+  lease_start: optionalIsoDate,
+  lease_end: optionalIsoDate,
+  notes: plainText(500),
+});
+
+/**
+ * Une quittance de loyer.
+ *
+ * `total_amount` est recalculé côté serveur à partir des trois postes, et
+ * n'est donc PAS attendu ici : le total est ce que le locataire a versé,
+ * et l'accepter du formulaire permettrait d'émettre une quittance dont la
+ * somme ne correspond pas à son propre détail.
+ *
+ * Le numéro n'y figure pas non plus — la base l'attribue à l'insertion et
+ * le gèle ensuite, comme pour un reçu.
+ */
+export const rentReceiptSchema = z
+  .object({
+    issued_on: isoDate,
+    property_id: optionalUuid,
+    tenant_id: optionalUuid,
+    tenant_name: text(1, 160, "Le nom du locataire"),
+    tenant_phone: plainText(60),
+    property_label: plainText(160),
+    property_address: plainText(240),
+    property_kind: z.preprocess(
+      blankIfMissing,
+      z
+        .string()
+        .trim()
+        .transform((v) => (v === "" ? null : v))
+        .pipe(
+          z
+            .enum([
+              "appartement",
+              "villa",
+              "maison",
+              "bureau",
+              "local_commercial",
+              "immeuble",
+              "terrain",
+              "autre",
+            ])
+            .nullable(),
+        ),
+    ),
+    landlord_name: plainText(160),
+    manager_name: plainText(160),
+    period_start: isoDate,
+    period_end: isoDate,
+    period_label: plainText(80),
+    rent_amount: defaultedMoney,
+    charges_amount: defaultedMoney,
+    other_fees: defaultedMoney,
+    amount_in_words: plainText(300),
+    payment_method: z
+      .enum(["especes", "cheque", "virement", "depot", "mobile_money"])
+      .default("especes"),
+    payment_reference: plainText(120),
+    paid_on: optionalIsoDate,
+    notes: plainText(500),
+  })
+  // Une période qui finit avant de commencer passerait la contrainte
+  // PostgreSQL avec un message que personne ne peut lire. On la refuse ici,
+  // dans les termes du métier.
+  .refine((v) => v.period_end >= v.period_start, {
+    message: "La fin de période précède son début.",
+    path: ["period_end"],
+  })
+  .refine((v) => v.rent_amount + v.charges_amount + v.other_fees > 0, {
+    message: "Une quittance sans montant ne prouve aucun paiement.",
+    path: ["rent_amount"],
+  });
+
 /** Convertit un FormData en objet simple avant validation Zod. */
 export function formDataToObject(formData: FormData) {
   const out: Record<string, string> = {};

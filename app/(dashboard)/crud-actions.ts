@@ -35,6 +35,24 @@ const DELETABLE: Record<
     paths: ["/delivery-notes", "/dashboard"],
     label: "bon de sortie",
   },
+  // Un bien encore rattaché à un locataire ou à une quittance ne part pas :
+  // les clés étrangères sont déclarées RESTRICT, et le 23503 remonte avec
+  // le message métier ci-dessous.
+  properties: {
+    roles: ["owner", "manager"],
+    paths: ["/properties", "/tenants"],
+    label: "bien",
+  },
+  tenants: {
+    roles: ["owner", "manager"],
+    paths: ["/tenants", "/properties"],
+    label: "locataire",
+  },
+  // Les quittances ne figurent PAS ici, et c'est délibéré : une quittance
+  // émise s'annule, elle ne se supprime pas. Le déclencheur
+  // `guard_rent_receipt` refuse d'ailleurs la suppression au niveau de la
+  // base — l'omettre de cette liste évite seulement de proposer un geste
+  // que PostgreSQL rejetterait.
 };
 
 export async function deleteEntity(
