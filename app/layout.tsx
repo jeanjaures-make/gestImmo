@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Manrope } from "next/font/google";
 
+import { AuthBounce } from "@/components/auth-bounce";
 import { Providers } from "@/components/providers";
 import { Toaster } from "@/components/ui/sonner";
 import { organizationJsonLd, SITE, softwareJsonLd } from "@/lib/site";
@@ -117,6 +118,12 @@ export default function RootLayout({
           }}
         />
         <Providers>
+          {/* Dans la racine et non sur le seul accueil : c'est le « Site
+              URL » du projet Supabase qui décide où retombe un lien mort,
+              et ce réglage vit dans un tableau de bord, hors du dépôt.
+              Le composant ne rend rien et ne s'active que sur les
+              paramètres propres à Supabase. */}
+          <AuthBounce />
           {children}
           <Toaster position="bottom-right" />
         </Providers>

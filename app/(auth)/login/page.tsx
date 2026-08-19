@@ -1,7 +1,9 @@
 import Link from "next/link";
+import { AlertTriangle } from "lucide-react";
 
 import { AuthForm, EmailField, PasswordField } from "@/components/auth-form";
 import { Card, CardContent } from "@/components/ui/kit";
+import { authErrorMessage } from "@/lib/auth-errors";
 import { safeNext } from "@/lib/redirect";
 import { signIn } from "./actions";
 
@@ -10,9 +12,14 @@ export const metadata = { title: "Connexion — CaisseOps" };
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string }>;
+  searchParams: Promise<{ next?: string; error?: string }>;
 }) {
-  const { next } = await searchParams;
+  const { next, error } = await searchParams;
+
+  // Un lien d'activation périmé, une réclamation déjà consommée : sept
+  // routes redirigent ici avec un code. Il ne servait à rien tant que
+  // personne ne le lisait.
+  const notice = authErrorMessage(error);
 
   // Le proxy pose `next` quand il intercepte une page protégée. On le
   // renvoie au formulaire après l'avoir borné à un chemin interne : sans
@@ -27,6 +34,16 @@ export default async function LoginPage({
         <p className="mb-6 text-sm text-muted-foreground">
           Accédez à votre espace de pilotage.
         </p>
+
+        {notice && (
+          <div
+            role="status"
+            className="mb-6 flex gap-2.5 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2.5 text-sm"
+          >
+            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning-on-tint" />
+            <p>{notice}</p>
+          </div>
+        )}
 
         <AuthForm action={signIn} submitLabel="Se connecter">
           <input type="hidden" name="next" value={destination} />
