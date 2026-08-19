@@ -1,0 +1,25 @@
+<!--
+  Icône d'onglet — le même repère que la vignette de partage
+  (`app/opengraph-image.tsx`) : carré arrondi #355C7D, « C » clair.
+
+  Dessinée à la main, là où la vignette est générée par le code. Ce n'est
+  pas une incohérence : une favicon se juge à 16 pixels, où l'enjeu n'est
+  plus de suivre le nom du produit mais de rester lisible. Le « C » est
+  donc un tracé, et non un caractère — aucune police n'est disponible au
+  moment où le navigateur rend l'onglet, et le repli varie d'un système à
+  l'autre.
+
+  En SVG plutôt qu'en .ico : un seul fichier net à toutes les tailles,
+  seize octets contre vingt-cinq kilo-octets, et rien à réexporter le jour
+  où la couleur de marque change.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="CaisseOps">
+  <rect width="32" height="32" rx="8" fill="#355C7D" />
+  <path
+    d="M20.59 9.45 A 8 8 0 1 0 20.59 22.55"
+    fill="none"
+    stroke="#FAFAF8"
+    stroke-width="5"
+    stroke-linecap="round"
+  />
+</svg>

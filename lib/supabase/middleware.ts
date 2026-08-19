@@ -34,6 +34,17 @@ const PUBLIC_PATHS = [
   // qui, par construction, n'a encore aucune session — c'est justement ce
   // que ces routes s'apprêtent à lui donner, une fois le paiement confirmé.
   "/api/signup",
+  // Fichiers de métadonnées produits par Next : ils n'ont pas d'extension,
+  // et échappaient donc à l'exclusion du matcher (`proxy.ts`). Ils
+  // repartaient en redirection vers `/login`.
+  //
+  // `/opengraph-image` est le plus coûteux des deux : c'est la vignette que
+  // WhatsApp, Facebook et LinkedIn vont chercher quand on partage un lien.
+  // À la place, ils recevaient une page HTML de connexion — donc aucune
+  // vignette. Sur un marché où le lien circule d'abord par WhatsApp, c'est
+  // la première impression qui se perdait.
+  "/opengraph-image",
+  "/apple-icon",
 ];
 
 /** Routes d'entrée dont un utilisateur déjà connecté n'a plus besoin. */
