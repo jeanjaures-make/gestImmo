@@ -16,16 +16,16 @@ Déclarées sur Vercel dans `Project Settings → Environment Variables`, pour
 | `NEXT_PUBLIC_SUPABASE_URL` | oui | URL du projet. C'est une URL, pas une clé. |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | oui | Clé publique. Soumise au RLS. |
 | `SUPABASE_SERVICE_ROLE_KEY` | oui | Crée les comptes que l'organisation n'ouvre pas elle-même : celui du souscripteur, une fois son paiement confirmé, et celui d'un collaborateur invité. **Contourne le RLS** : jamais de préfixe `NEXT_PUBLIC_`. |
-| `MONEROO_SECRET_KEY` | oui | Clé **secrète** du tableau de bord Moneroo — jamais la publique. Sans elle, aucun encaissement, donc aucune inscription. Jamais de préfixe `NEXT_PUBLIC_`. |
-| `MONEROO_WEBHOOK_SECRET` | oui | Authentifie les notifications de paiement (HMAC-SHA256 du corps reçu). Absente, le webhook **refuse tout** : un oubli ferme la porte au lieu de l'ouvrir. |
+| `CHARIOW_API_KEY` | oui | Clé **secrète** du tableau de bord Chariow (`sk_live_...` ou `sk_test_...`) — jamais la publique. Sans elle, aucun encaissement, donc aucune inscription. Jamais de préfixe `NEXT_PUBLIC_`. |
+| `CHARIOW_WEBHOOK_SECRET` | oui | Secret Pulse (`whsec_...`) pour authentifier les notifications de paiement (HMAC-SHA256 du corps reçu). Absente, le webhook **refuse tout** : un oubli ferme la porte au lieu de l'ouvrir. |
 | `CRON_SECRET` | oui | Authentifie le balayage quotidien des abonnements échus (`vercel.json`). Absente, la route refuse de s'exécuter : rien n'expire jamais, et les intentions d'inscription abandonnées s'accumulent. |
-| `MONEROO_API_URL` | non | Ne sert qu'à viser un autre hôte. L'adresse est la même en test et en production — c'est la **clé** qui choisit l'environnement. |
+| `CHARIOW_API_URL` | non | Ne sert qu'à viser un autre hôte (défaut : `https://api.chariow.com/v1`). |
 | `NEXT_PUBLIC_SITE_URL` | non | URL canonique, si le domaine servi n'est pas celui que Vercel annonce. Sinon déduite de `VERCEL_PROJECT_PRODUCTION_URL`. |
 | `SMTP_PROVIDER_CONFIGURED` | non | `true` une fois un vrai SMTP raccordé. Purement déclaratif : éteint l'avertissement de `/setup`, n'active rien. |
 | `SENTRY_DSN` | non | Prépare le signalement d'erreurs. Absent, l'application fonctionne normalement. |
 
 Les quatre premières ne sont pas négociables depuis que l'inscription est
-subordonnée au paiement : sans les clés Moneroo, rien n'est encaissé ni
+subordonnée au paiement : sans les clés Chariow, rien n'est encaissé ni
 confirmé ; sans `SUPABASE_SERVICE_ROLE_KEY`, le paiement confirmé
 n'aboutit à aucun compte. **Aucun client ne peut alors entrer**, et
 l'invitation d'un collaborateur tombe avec.

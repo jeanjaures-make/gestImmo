@@ -1,6 +1,6 @@
 import "server-only";
 
-import { MonerooPaymentProvider } from "./moneroo";
+import { ChariowPaymentProvider } from "./chariow";
 import type { PaymentProvider } from "./provider";
 
 export type {
@@ -16,10 +16,10 @@ export { PaymentProviderError } from "./provider";
  *
  * Un seul endroit à changer le jour où l'on en ajoute un second, et un
  * seul import pour tout le reste du code. Les routes n'instancient jamais
- * `MonerooPaymentProvider` directement : elles demandent « le
+ * `ChariowPaymentProvider` directement : elles demandent « le
  * fournisseur », ce qui les garde ignorantes de son nom.
  */
-const provider: PaymentProvider = new MonerooPaymentProvider();
+const provider: PaymentProvider = new ChariowPaymentProvider();
 
 export function paymentProvider(): PaymentProvider {
   return provider;
@@ -28,10 +28,10 @@ export function paymentProvider(): PaymentProvider {
 /**
  * Référence interne de la transaction.
  *
- * Moneroo attribue son propre identifiant, mais seulement APRÈS l'appel :
+ * Chariow attribue son propre identifiant, mais seulement APRÈS l'appel :
  * il nous en faut donc un avant, pour poser la ligne `payments` en
  * attente. Celui-ci voyage ensuite dans les métadonnées et reste le fil
- * qui relie les deux si l'identifiant Moneroo n'a pas pu être enregistré.
+ * qui relie les deux si l'identifiant Chariow n'a pas pu être enregistré.
  */
 export function generatePaymentReference(): string {
   const timestamp = Date.now().toString(36);

@@ -60,11 +60,11 @@ sur `/subscribe`) garde `organization_id` dès sa création et `intent_id`
 - `signup_intent_status(intent_id)` — lue par `/api/signup/status` ; ne
   rend qu'un mot, jamais l'e-mail ni le nom de l'entreprise.
 
-**Le webhook** (`app/api/webhooks/moneroo/route.ts`) distingue les deux
+**Le webhook** (`app/api/webhooks/chariow/route.ts`) distingue les deux
 natures de paiement par `payments.intent_id` : `NULL` suit le chemin
 `confirm_payment` existant (renouvellement, inchangé) ; renseigné suit le
 nouveau chemin ci-dessus. Dans les deux cas, mêmes gardes en amont :
-signature HMAC, re-vérification serveur auprès de Moneroo, montant et
+signature HMAC, re-vérification serveur auprès de Chariow, montant et
 devise comparés à `plans.price` — jamais au corps de la notification.
 
 **Une organisation naît par un seul chemin.** `create_organization` —
@@ -117,7 +117,7 @@ La règle : **les jours restants ne sont jamais perdus**.
 - Si l'abonnement expire le 20 septembre et que le client renouvelle le 15 septembre → nouvelle expiration = 20 octobre.
 - Si l'abonnement est déjà expiré → nouvelle expiration = maintenant + 30 jours.
 
-Cette logique est implémentée dans le webhook (`app/api/webhooks/moneroo/route.ts` et la fonction SQL `confirm_payment`).
+Cette logique est implémentée dans le webhook (`app/api/webhooks/chariow/route.ts` et la fonction SQL `confirm_payment`).
 
 ## Quotas
 

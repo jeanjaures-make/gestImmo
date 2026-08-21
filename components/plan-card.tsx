@@ -35,7 +35,7 @@ export function PlanCard({
     setLoading(true);
     startTransition(async () => {
       try {
-        const response = await fetch("/api/payments/moneroo/create", {
+        const response = await fetch("/api/payments/chariow/create", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ plan_id: plan.id }),

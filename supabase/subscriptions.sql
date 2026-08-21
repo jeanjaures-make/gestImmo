@@ -183,7 +183,7 @@ CREATE TABLE IF NOT EXISTS payments (
   transaction_id  TEXT NOT NULL UNIQUE,
   amount          NUMERIC(14, 2) NOT NULL CHECK (amount >= 0),
   currency        TEXT NOT NULL DEFAULT 'XOF',
-  provider        TEXT NOT NULL DEFAULT 'moneroo',
+  provider        TEXT NOT NULL DEFAULT 'chariow',
   payment_method  TEXT,
   status          payment_status NOT NULL DEFAULT 'pending',
   paid_at         TIMESTAMPTZ,
