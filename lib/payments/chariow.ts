@@ -56,15 +56,35 @@ export class ChariowPaymentProvider implements PaymentProvider {
   async createPayment(
     input: CreatePaymentInput,
   ): Promise<CreatePaymentResult> {
-    // Dans Chariow, l'identifiant du produit (product_id ou slug) peut être
-    // passé dans les métadonnées (ex: input.metadata.product_id ou slug du plan).
-    // Si aucun product_id spécifique n'est précisé, on utilise le slug du plan
-    // ou une variable d'environnement de fallback.
+    // Dans Chariow, l'API exige un `product_id` réel publié sur votre store Chariow
+    // (ex: "prd_abc123xyz" ou le slug du produit créé dans votre dashboard Chariow).
+    //
+    // Ordre de priorité pour trouver le product_id :
+    // 1. input.metadata.product_id (si passé explicitement)
+    // 2. Variable d'environnement spécifique au plan (ex: CHARIOW_PRODUCT_STARTER, CHARIOW_PRODUCT_BUSINESS, CHARIOW_PRODUCT_UNLIMITED)
+    // 3. input.metadata.plan_slug (si le slug sur Chariow correspond exactement au slug du plan)
+    // 4. CHARIOW_DEFAULT_PRODUCT_ID (si un seul produit est configuré sur Chariow)
+    const planSlug = (input.metadata.plan_slug || "").toLowerCase();
+    const envPlanProductId =
+      planSlug === "starter"
+        ? process.env.CHARIOW_PRODUCT_STARTER
+        : planSlug === "business"
+          ? process.env.CHARIOW_PRODUCT_BUSINESS
+          : planSlug === "unlimited"
+            ? process.env.CHARIOW_PRODUCT_UNLIMITED
+            : undefined;
+
     const productId =
       input.metadata.product_id ||
+      envPlanProductId ||
       input.metadata.plan_slug ||
-      process.env.CHARIOW_DEFAULT_PRODUCT_ID ||
-      "caisseops-subscription";
+      process.env.CHARIOW_DEFAULT_PRODUCT_ID;
+
+    if (!productId) {
+      throw new PaymentProviderError(
+        "Identifiant de produit Chariow introuvable. Veuillez configurer le produit dans votre tableau de bord Chariow.",
+      );
+    }
 
     // Formatage du téléphone si disponible, sinon valeur par défaut pour la Côte d'Ivoire (+225)
     const phoneInput = input.metadata.phone || "0000000000";

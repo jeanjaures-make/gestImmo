@@ -43,8 +43,11 @@ Abonnement actif dans Supabase & Accès instantané aux fonctionnalités
 |---|---|
 | `CHARIOW_API_KEY` | Clé secrète API Chariow (`sk_live_...` ou `sk_test_...`). |
 | `CHARIOW_WEBHOOK_SECRET` | Secret de signature du webhook Pulse Chariow (`whsec_...`). |
+| `CHARIOW_PRODUCT_STARTER` | ID public (`prd_...`) ou slug du produit Starter sur Chariow. |
+| `CHARIOW_PRODUCT_BUSINESS` | ID public (`prd_...`) ou slug du produit Business sur Chariow. |
+| `CHARIOW_PRODUCT_UNLIMITED` | ID public (`prd_...`) ou slug du produit Illimité sur Chariow. |
+| `CHARIOW_DEFAULT_PRODUCT_ID` | *(Optionnel)* ID public ou slug de fallback pour les produits. |
 | `CHARIOW_API_URL` | *(Optionnel)* URL de base de l'API (défaut : `https://api.chariow.com/v1`). |
-| `CHARIOW_DEFAULT_PRODUCT_ID` | *(Optionnel)* ID public ou slug du produit par défaut si non spécifié par plan. |
 
 ---
 
