@@ -142,9 +142,9 @@ export async function startSignup(
       description: `Abonnement ${plan.name} — CaisseOps`,
       customer: { email, firstName: "Client", lastName: "CaisseOps" },
       // L'identifiant de l'INTENTION, pas notre référence de paiement :
-      // c'est ce que /payment/success interroge, et c'est ce que la
+      // c'est ce que /billing/success interroge, et c'est ce que la
       // réclamation (claim) verrouille à usage unique.
-      returnUrl: `${origin}/payment/success?ref=${intent.id}`,
+      returnUrl: `${origin}/billing/success?ref=${intent.id}`,
       metadata: { payment_ref: reference, intent_id: intent.id, plan_id: plan.id },
     });
 

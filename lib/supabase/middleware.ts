@@ -19,6 +19,9 @@ const PUBLIC_PATHS = [
   "/auth",
   "/setup",
   "/legal",
+  // Pages de retour après paiement / facturation (accessibles avec ou sans session)
+  "/billing",
+  "/payment",
   // Le choix de l'offre précède l'inscription : il doit donc être
   // consultable sans compte. L'oublier ici renvoyait vers la connexion
   // toute personne cliquant « Commencer » — soit l'inverse du parcours.
@@ -65,8 +68,8 @@ const GUEST_ONLY_PATHS = ["/login", "/signup", "/forgot-password"];
  */
 const ANONYMOUS_PATHS = ["/", "/setup", "/offres"];
 
-/** Même logique, pour un préfixe entier : les pages légales. */
-const ANONYMOUS_PREFIXES = ["/legal/", "/payment/"];
+/** Même logique, pour un préfixe entier : les pages légales et de retour paiement. */
+const ANONYMOUS_PREFIXES = ["/legal/", "/payment/", "/billing/"];
 
 /**
  * Rafraîchit le jeton de session à chaque requête et protège le dashboard.

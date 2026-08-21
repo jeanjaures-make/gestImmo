@@ -138,7 +138,7 @@ export async function POST(request: NextRequest) {
         firstName: session.profile.firstname || "Client",
         lastName: session.profile.lastname || "CaisseOps",
       },
-      returnUrl: `${origin}/payment/success?ref=${reference}`,
+      returnUrl: `${origin}/billing/success?ref=${reference}`,
       metadata: {
         payment_ref: reference,
         organization_id: organizationId,

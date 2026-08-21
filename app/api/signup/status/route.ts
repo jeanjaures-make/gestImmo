@@ -4,8 +4,8 @@ import { callerKey, rateLimit } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
- * Statut public d'une intention d'inscription — sondé par `/payment/success`
- * pendant que le webhook Moneroo confirme le paiement en arrière-plan.
+ * Statut public d'une intention d'inscription — sondé par `/billing/success`
+ * pendant que le webhook Chariow confirme le paiement en arrière-plan.
  *
  * Ne rend qu'un mot : ni l'e-mail, ni le nom de l'entreprise, ni aucun
  * identifiant utilisable. La personne qui interroge cette route n'a pas de
