@@ -74,24 +74,38 @@ export class ChariowPaymentProvider implements PaymentProvider {
             ? process.env.CHARIOW_PRODUCT_UNLIMITED
             : undefined;
 
-    let productId =
+    let rawProductId =
       input.metadata.product_id ||
       envPlanProductId ||
       input.metadata.plan_slug ||
       process.env.CHARIOW_DEFAULT_PRODUCT_ID;
 
-    if (!productId) {
+    if (!rawProductId) {
       throw new PaymentProviderError(
         "Identifiant de produit Chariow introuvable. Veuillez configurer le produit dans votre tableau de bord Chariow.",
       );
     }
 
-    // Si une URL complète a été renseignée (ex: https://xxx.mychariow.shop/prd_abc ou .../slug),
-    // on extrait uniquement le slug ou l'identifiant final.
-    if (productId.startsWith("http://") || productId.startsWith("https://")) {
+    let productId = String(rawProductId).trim();
+
+    // Si la valeur contient directement un pattern prd_..., on l'extrait
+    const prdMatch = productId.match(/prd_[a-zA-Z0-9]+/);
+    if (prdMatch) {
+      productId = prdMatch[0];
+    } else if (productId.startsWith("http://") || productId.startsWith("https://")) {
+      // Si une URL complète a été renseignée (ex: https://xxx.mychariow.shop/slug/checkout),
+      // on ignore les segments comme 'checkout', 'p', 'products' pour extraire le slug
       try {
         const parsedUrl = new URL(productId);
-        const segments = parsedUrl.pathname.split("/").filter(Boolean);
+        const segments = parsedUrl.pathname
+          .split("/")
+          .filter(Boolean)
+          .filter(
+            (s) =>
+              !["checkout", "p", "products", "pay", "view"].includes(
+                s.toLowerCase(),
+              ),
+          );
         if (segments.length > 0) {
           productId = segments[segments.length - 1];
         }
