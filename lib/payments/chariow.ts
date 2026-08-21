@@ -74,7 +74,7 @@ export class ChariowPaymentProvider implements PaymentProvider {
             ? process.env.CHARIOW_PRODUCT_UNLIMITED
             : undefined;
 
-    const productId =
+    let productId =
       input.metadata.product_id ||
       envPlanProductId ||
       input.metadata.plan_slug ||
@@ -84,6 +84,20 @@ export class ChariowPaymentProvider implements PaymentProvider {
       throw new PaymentProviderError(
         "Identifiant de produit Chariow introuvable. Veuillez configurer le produit dans votre tableau de bord Chariow.",
       );
+    }
+
+    // Si une URL complète a été renseignée (ex: https://xxx.mychariow.shop/prd_abc ou .../slug),
+    // on extrait uniquement le slug ou l'identifiant final.
+    if (productId.startsWith("http://") || productId.startsWith("https://")) {
+      try {
+        const parsedUrl = new URL(productId);
+        const segments = parsedUrl.pathname.split("/").filter(Boolean);
+        if (segments.length > 0) {
+          productId = segments[segments.length - 1];
+        }
+      } catch {
+        // Garder productId tel quel
+      }
     }
 
     // Formatage du téléphone si disponible, sinon valeur par défaut pour la Côte d'Ivoire (+225)
