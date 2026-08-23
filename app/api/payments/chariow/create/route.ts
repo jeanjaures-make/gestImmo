@@ -77,6 +77,16 @@ export async function POST(request: NextRequest) {
 
   const supabase = await createClient();
   const organizationId = session.organization.id;
+  const phone =
+    typeof body.phone === "string" ? body.phone : session.organization.phone || "";
+  const phoneDigits = phone.replace(/\D/g, "");
+  if (phoneDigits.length < 8 || phoneDigits.length > 15) {
+    return NextResponse.json(
+      { error: "Renseignez un numéro de téléphone valide dans Réglages avant de payer." },
+      { status: 400 },
+    );
+  }
+  const countryCode = typeof body.country_code === "string" ? body.country_code : "CI";
   const reference = generatePaymentReference();
 
   // ─── L'abonnement en attente ───────────────────────────────────────
@@ -125,9 +135,6 @@ export async function POST(request: NextRequest) {
 
   // ─── L'appel à Chariow ───────────────────────────────────────────────
   const origin = new URL(request.url).origin;
-  const phone = typeof body.phone === "string" ? body.phone : session.organization.phone || "";
-  const countryCode = typeof body.country_code === "string" ? body.country_code : "CI";
-
   try {
     const { transactionId, checkoutUrl } = await provider.createPayment({
       amount: Number(plan.price),

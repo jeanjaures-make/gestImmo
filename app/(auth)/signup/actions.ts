@@ -52,7 +52,7 @@ export async function startSignup(
 
   const parsed = signupIntentSchema.safeParse(formDataToObject(formData));
   if (!parsed.success) return { error: firstIssue(parsed.error) };
-  const { email, org_name: orgName, plan: planSlug } = parsed.data;
+  const { email, org_name: orgName, phone, plan: planSlug } = parsed.data;
 
   const provider = paymentProvider();
   if (!provider.isConfigured()) {
@@ -145,7 +145,13 @@ export async function startSignup(
       // c'est ce que /billing/success interroge, et c'est ce que la
       // réclamation (claim) verrouille à usage unique.
       returnUrl: `${origin}/billing/success?ref=${intent.id}`,
-      metadata: { payment_ref: reference, intent_id: intent.id, plan_id: plan.id },
+      metadata: {
+        payment_ref: reference,
+        intent_id: intent.id,
+        plan_id: plan.id,
+        phone,
+        country_code: "CI",
+      },
     });
 
     const { error: linkError, count } = await admin

@@ -167,6 +167,16 @@ export const organizationSchema = z.object({
 export const signupIntentSchema = z.object({
   email: z.email({ message: "Adresse e-mail invalide." }),
   org_name: text(2, 120, "Le nom de l'entreprise"),
+  phone: z
+    .string()
+    .trim()
+    .refine(
+      (value) => {
+        const digits = value.replace(/\D/g, "");
+        return digits.length >= 8 && digits.length <= 15;
+      },
+      { message: "Saisissez un numéro de téléphone valide." },
+    ),
   plan: z
     .string()
     .trim()

@@ -114,9 +114,15 @@ export class ChariowPaymentProvider implements PaymentProvider {
       }
     }
 
-    // Formatage du téléphone si disponible, sinon valeur par défaut pour la Côte d'Ivoire (+225)
-    const phoneInput = input.metadata.phone || "0000000000";
+    const phoneInput = input.metadata.phone;
     const countryCode = input.metadata.country_code || "CI";
+    const phoneNumber = String(phoneInput ?? "").replace(/\D/g, "");
+
+    if (phoneNumber.length < 8 || phoneNumber.length > 15) {
+      throw new PaymentProviderError(
+        "Un numéro de téléphone valide est requis pour le paiement Chariow.",
+      );
+    }
 
     const payload: Record<string, unknown> = {
       product_id: productId,
@@ -124,7 +130,7 @@ export class ChariowPaymentProvider implements PaymentProvider {
       first_name: input.customer.firstName || "Client",
       last_name: input.customer.lastName || "CaisseOps",
       phone: {
-        number: phoneInput.replace(/\D/g, "") || "0102030405",
+        number: phoneNumber,
         country_code: countryCode,
       },
       redirect_url: input.returnUrl,

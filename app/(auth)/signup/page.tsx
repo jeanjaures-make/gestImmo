@@ -87,6 +87,18 @@ export default async function SignUpPage({
               className="h-11"
             />
           </Field>
+          <Field label="Téléphone">
+            <Input
+              name="phone"
+              type="tel"
+              autoComplete="tel-national"
+              inputMode="tel"
+              required
+              maxLength={30}
+              placeholder="0700000000"
+              className="h-11"
+            />
+          </Field>
         </AuthForm>
 
         <p className="mt-5 flex items-start gap-2 text-xs text-muted-foreground">
