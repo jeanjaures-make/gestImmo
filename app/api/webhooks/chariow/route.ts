@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { reportError } from "@/lib/observability";
-import { paymentProvider } from "@/lib/payments";
+import { ChariowPaymentProvider } from "@/lib/payments/chariow";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
@@ -23,7 +23,9 @@ type PaymentRow = {
 };
 
 export async function POST(request: NextRequest) {
-  const provider = paymentProvider();
+  // Conserve la vérification des transactions historiques Chariow après la
+  // migration du fournisseur principal vers PayDunya.
+  const provider = new ChariowPaymentProvider();
 
   const rawBody = await request.text();
   const signature = request.headers.get("x-chariow-signature");
@@ -44,17 +46,28 @@ export async function POST(request: NextRequest) {
   const eventType =
     request.headers.get("x-pulse-event") || provider.extractEventType(payload);
 
-  if (!transactionId) {
-    return NextResponse.json({ received: true, matched: false });
+  const admin = createAdminClient();
+  if (!admin) return NextResponse.json({ error: "Service indisponible." }, { status: 503 });
+
+  // Les événements de licence peuvent être envoyés sans sale.id. Ils ne
+  // créent jamais un droit : ils synchronisent seulement une licence déjà liée.
+  if (eventType.startsWith("license.")) {
+    const license = (payload as { license?: Record<string, unknown> }).license;
+    const licenseId = license?.id ?? license?.license_id;
+    if (deliveryId) {
+      const { data: seen } = await admin.from("payment_events").select("id").eq("event_id", deliveryId).maybeSingle();
+      if (seen) return NextResponse.json({ received: true, deduplicated: true });
+      await admin.from("payment_events").insert({ transaction_id: typeof licenseId === "string" ? licenseId : `license:${deliveryId}`, event_id: deliveryId, event_type: eventType, payload: payload as Record<string, unknown> });
+    }
+    if (typeof licenseId === "string") {
+      const status = eventType === "license.expired" ? "expired" : eventType === "license.revoked" ? "revoked" : eventType === "license.activated" ? "active" : undefined;
+      if (status) await admin.from("licenses").update({ status, activated_at: license?.activated_at ?? undefined, expires_at: license?.expires_at ?? undefined }).eq("chariow_license_id", licenseId);
+    }
+    return NextResponse.json({ received: true, event: eventType });
   }
 
-  const admin = createAdminClient();
-  if (!admin) {
-    reportError(new Error("SUPABASE_SERVICE_ROLE_KEY absente"), {
-      scope: "chariow-webhook",
-      extra: { transactionId, eventType, deliveryId },
-    });
-    return NextResponse.json({ error: "Service indisponible." }, { status: 503 });
+  if (!transactionId) {
+    return NextResponse.json({ received: true, matched: false });
   }
 
   // Idempotence au niveau de payment_events si delivery_id est fourni

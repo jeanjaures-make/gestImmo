@@ -55,6 +55,7 @@ const NAV: NavItem[] = [
   // Le propriétaire seul : c'est lui qui engage la dépense, et lui seul
   // que la base autorise à écrire dans `subscriptions`.
   { href: "/subscribe", label: "Abonnement", icon: CreditCard, roles: ["owner"] },
+  { href: "/license", label: "Activer une licence", icon: KeyRound },
   { href: "/settings", label: "Réglages", icon: Settings },
 ];
 

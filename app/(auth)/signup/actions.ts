@@ -28,7 +28,7 @@ export type SignupState = { error?: string };
  * balayage quotidien efface au bout de 24 h.
  *
  * Le compte n'existe qu'après confirmation du paiement, par le webhook
- * Chariow (`app/api/webhooks/chariow/route.ts`) — seule autorité
+ * PayDunya (`app/api/webhooks/paydunya/route.ts`) — seule autorité
  * d'activation. Voir `provision_signup_intent` dans
  * `supabase/subscriptions.sql`.
  */
@@ -37,7 +37,7 @@ export async function startSignup(
   formData: FormData,
 ): Promise<SignupState> {
   // Route publique, non authentifiée, qui ouvre une transaction chez
-  // Chariow : plus resserrée que la limite de paiement d'un propriétaire
+  // PayDunya : plus resserrée que la limite de paiement d'un propriétaire
   // déjà connu (10/10 min), puisque n'importe qui sur Internet l'atteint.
   const limit = await rateLimit({
     key: await callerKey("signup-start"),

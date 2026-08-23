@@ -44,7 +44,7 @@ export default async function SubscribePage({
     <>
       <PageHeader
         title="Choisissez votre plan"
-        description="Souscrivez en ligne. Le paiement est traité par Moneroo : mobile money ou carte, selon ce que propose votre pays."
+        description="Souscrivez en ligne en toute sécurité avec Chariow."
       />
 
       {reason === "audit" && (
@@ -94,7 +94,7 @@ export default async function SubscribePage({
       </div>
 
       <p className="mt-8 text-center text-xs text-muted-foreground">
-        Paiements traités par Moneroo. CaisseOps ne voit ni ne conserve
+        Paiements traités par Chariow. CaisseOps ne voit ni ne conserve
         aucune donnée bancaire : la page de paiement est hébergée par le
         fournisseur, et les clés restent côté serveur.
       </p>

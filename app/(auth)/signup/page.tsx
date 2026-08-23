@@ -16,7 +16,7 @@ export const metadata = { title: "Créer votre compte — CaisseOps" };
  *
  * ─── Pourquoi pas de mot de passe ici ────────────────────────────────────
  * Ce formulaire ne crée aucun compte : il ouvre une INTENTION, puis un
- * paiement chez Moneroo. Le compte Supabase Auth ne naît qu'à la
+ * paiement chez PayDunya. Le compte Supabase Auth ne naît qu'à la
  * confirmation du webhook — un événement serveur qui ne connaît rien du
  * navigateur qui a payé. Demander un mot de passe maintenant obligerait à
  * le conserver quelque part en attendant, ce que rien n'oblige à risquer.
@@ -91,14 +91,14 @@ export default async function SignUpPage({
 
         <p className="mt-5 flex items-start gap-2 text-xs text-muted-foreground">
           <CreditCard className="mt-0.5 size-3.5 shrink-0" />
-          Vous serez redirigé vers Moneroo pour régler {formatCurrency(chosen.price)}.
+          Vous serez redirigé vers Chariow pour régler {formatCurrency(chosen.price)}.
           Aucune donnée bancaire ne transite par CaisseOps.
         </p>
 
         <p className="mt-2 flex items-start gap-2 text-xs text-muted-foreground">
           <ShieldCheck className="mt-0.5 size-3.5 shrink-0" />
           Votre espace ne s&apos;active qu&apos;une fois le paiement confirmé
-          par Moneroo — jamais avant.
+          par Chariow — jamais avant.
         </p>
 
         <p className="mt-6 text-center text-sm text-muted-foreground">

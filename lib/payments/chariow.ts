@@ -225,6 +225,33 @@ export class ChariowPaymentProvider implements PaymentProvider {
     };
   }
 
+  async getLicense(key: string): Promise<Record<string, unknown>> {
+    const response = await fetch(`${apiUrl()}/licenses/${encodeURIComponent(key)}`, {
+      method: "GET", headers: this.headers(), cache: "no-store",
+    });
+    const body = await readJson(response);
+    if (!response.ok || !body || typeof body !== "object") {
+      throw new PaymentProviderError("Licence Chariow introuvable.", response.status);
+    }
+    const data = (body as { data?: unknown }).data;
+    if (!data || typeof data !== "object") throw new PaymentProviderError("Réponse de licence invalide.");
+    return data as Record<string, unknown>;
+  }
+
+  async activateLicense(key: string, deviceIdentifier: string): Promise<Record<string, unknown>> {
+    const response = await fetch(`${apiUrl()}/licenses/${encodeURIComponent(key)}/activate`, {
+      method: "POST", headers: this.headers(), cache: "no-store",
+      body: JSON.stringify({ device_identifier: deviceIdentifier }),
+    });
+    const body = await readJson(response);
+    if (!response.ok || !body || typeof body !== "object") {
+      throw new PaymentProviderError("Activation de la licence refusée.", response.status);
+    }
+    const data = (body as { data?: unknown }).data;
+    if (!data || typeof data !== "object") throw new PaymentProviderError("Réponse d'activation invalide.");
+    return data as Record<string, unknown>;
+  }
+
   /**
    * Compare la signature reçue (en-tête x-chariow-signature) à celle calculée via HMAC-SHA256.
    * Format Chariow : "sha256=<hex_digest>"

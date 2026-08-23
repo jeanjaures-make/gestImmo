@@ -9,12 +9,12 @@ import { getActiveSubscription } from "@/lib/subscriptions";
 export const metadata = { title: "Paiement reçu — CaisseOps" };
 
 /**
- * Page de confirmation / vérification après paiement Chariow (/billing/success).
+ * Page de confirmation / vérification après paiement PayDunya (/billing/success).
  *
  * IMPORTANT :
  * - L'arrivée sur cette page n'est JAMAIS considérée comme une preuve de paiement.
  * - Cette page ne modifie AUCUNE donnée et n'active aucun abonnement directement.
- * - Le statut réel provient de Supabase, mis à jour par le Pulse/webhook Chariow.
+ * - Le statut réel provient de Supabase, mis à jour par l'IPN PayDunya.
  *
  * ─── Deux cas de figure ──────────────────────────────────────────────────
  * 1. Nouvel utilisateur (inscription payante) :

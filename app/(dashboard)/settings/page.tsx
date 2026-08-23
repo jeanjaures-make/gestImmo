@@ -1,5 +1,6 @@
 import Image from "next/image";
 import { Monitor, ShieldCheck } from "lucide-react";
+import { headers } from "next/headers";
 
 import { SettingsForm } from "@/components/settings-form";
 import { SignOutEverywhere } from "@/components/sign-out-everywhere";
@@ -67,6 +68,11 @@ export default async function SettingsPage() {
   const { profile, organization, email, userId } = await requireSession();
   const isOwner = canAdminister(profile.role);
 
+  const requestHeaders = await headers();
+  const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host") ?? "votre-domaine";
+  const protocol = requestHeaders.get("x-forwarded-proto") ?? "https";
+  const pulseUrl = `${protocol}://${host}/api/webhooks/chariow`;
+
   const supabase = await createClient();
 
   // `count: "exact"` : on affiche le total, pas seulement la tranche visible.
@@ -92,6 +98,25 @@ export default async function SettingsPage() {
         {/* --------------------------------------------------- En-tête */}
         {isOwner ? (
           <>
+            <Card>
+              <CardContent className="p-5">
+                <h2 className="font-heading font-medium">Paiements Chariow</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Adresse du Pulse à déclarer dans Chariow. Elle reçoit les
+                  confirmations de paiement et active les abonnements.
+                </p>
+                <code className="mt-4 block overflow-x-auto rounded-md border bg-muted px-3 py-2 text-xs text-foreground">
+                  {pulseUrl}
+                </code>
+                <p className="mt-3 text-xs text-muted-foreground">
+                  Cette adresse est une route serveur publique, pas une page
+                  accessible aux utilisateurs. Ne modifiez pas les clés Chariow
+                  ici : elles restent dans les variables d&apos;environnement du
+                  déploiement.
+                </p>
+              </CardContent>
+            </Card>
+
             <SettingsForm
               title="En-tête de vos pièces"
               description="Ce bloc s'imprime en haut de chaque reçu, bon de caisse et bon de sortie. Tout est facultatif sauf le nom : complétez au fil de l'eau, vos pièces restent émettables entre-temps."
